@@ -47,4 +47,26 @@ class PlacementTest {
         // Tiny canvases still get usable sizes.
         assertEquals(Placement.MIN_FONT_SIZE, Placement.defaultFontSize(CanvasSpec(16, 16)), EPS)
     }
+
+    @Test
+    fun frameFollowsTheViewWhenZoomedIn() {
+        val c = CanvasSpec(1080, 1080)
+        // Zoomed into a 200 x 300 area near the top-left corner.
+        val zoomed = Placement.frame(c, Rect(100.0, 50.0, 300.0, 350.0))
+        assertVec(Vec2(200.0, 200.0), zoomed.center)
+        assertEquals(CanvasSpec(200, 300), zoomed.sizing)
+        // New text and images are sized for what is on screen.
+        assertEquals(160.0, Placement.defaultTextBoxWidth(zoomed.sizing), EPS)
+        assertEquals(0.04, Placement.centeredFit(zoomed.sizing, 4000, 3000).scaleX, EPS)
+    }
+
+    @Test
+    fun frameIsTheCanvasWhenAllOfItIsInView() {
+        val c = CanvasSpec(1080, 1080)
+        // Fitted view: the screen shows the canvas plus a margin around it.
+        val fitted = Placement.frame(c, Rect(-60.0, -400.0, 1140.0, 1480.0))
+        assertVec(Vec2(540.0, 540.0), fitted.center)
+        assertEquals(c.width to c.height, fitted.sizing.width to fitted.sizing.height)
+        assertVec(Vec2(540.0, 540.0), Placement.frame(c, null).center)
+    }
 }
