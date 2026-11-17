@@ -7,6 +7,7 @@ import android.view.ViewConfiguration
 import io.github.drhydr0.layers.document.Document
 import io.github.drhydr0.layers.document.Layer
 import io.github.drhydr0.layers.document.LayerId
+import io.github.drhydr0.layers.document.Rect
 import io.github.drhydr0.layers.document.TextLayer
 import io.github.drhydr0.layers.document.Transform
 import io.github.drhydr0.layers.document.Vec2
@@ -14,6 +15,7 @@ import io.github.drhydr0.layers.history.Command
 import io.github.drhydr0.layers.history.TransformLayers
 import io.github.drhydr0.layers.history.UpdateLayer
 import io.github.drhydr0.layers.render.DocumentView
+import kotlin.math.abs
 import kotlin.math.hypot
 import kotlin.math.sqrt
 
@@ -21,24 +23,29 @@ import kotlin.math.sqrt
  * Turns touches on the canvas into selection and transform gestures.
  *
  * Gesture ownership is decided when the first finger lands and kept until all fingers
- * lift, so a second finger or the layer sliding under the fingers never retargets it.
- * Changes show as a temporary preview and are committed as one command at the end.
+ * lift, so a second finger or a layer sliding under the fingers never retargets it.
+ * Changes show as a temporary preview and are committed as one command at the end,
+ * however many layers they move.
  */
 class CanvasTouchController(
     private val view: DocumentView,
     private val hitTest: HitTest,
     private val document: () -> Document?,
     private val commit: (Command) -> Unit,
-    private val onSelectionChanged: (LayerId?) -> Unit,
+    private val onSelectionChanged: (Set<LayerId>) -> Unit,
     private val onEditText: (TextLayer) -> Unit,
 ) : View.OnTouchListener {
 
     private enum class Mode { NONE, MOVE, CORNER, ROTATE, WIDTH }
 
-    var selectedId: LayerId? = null
+    /** In selection order. */
+    var selectedIds: Set<LayerId> = emptySet()
         private set
 
-    val overlay = SelectionOverlay(view, hitTest) { selectedId }
+    val overlay = SelectionOverlay(view, hitTest) { selectedIds }
+
+    /** While on, taps add layers to or remove them from the selection. */
+    var multiSelectMode = false
 
     /** While on, every touch moves the view instead of editing (canvas navigation mode). */
     var navigationMode = false
@@ -49,17 +56,18 @@ class CanvasTouchController(
         }
 
     private val navigation = NavigationGestures(view)
-
     private val density = view.resources.displayMetrics.density
     private val touchSlop = ViewConfiguration.get(view.context).scaledTouchSlop
     private val doubleTapTimeout = ViewConfiguration.getDoubleTapTimeout().toLong()
 
     private var mode = Mode.NONE
     private var startDoc: Document? = null
-    private var targetId: LayerId? = null
-    private var baseTransform: Transform = Transform.IDENTITY
-    private var currentTransform: Transform = Transform.IDENTITY
+    private var targetIds: List<LayerId> = emptyList()
+    private var tappedId: LayerId? = null
+    private var baseTransforms: Map<LayerId, Transform> = emptyMap()
+    private var currentTransforms: Map<LayerId, Transform> = emptyMap()
     private var currentWidth = 0.0
+    private var groupPivot = Vec2.ZERO
     private val basePoints = mutableMapOf<Int, Vec2>()
     private var downX = 0f
     private var downY = 0f
@@ -67,17 +75,20 @@ class CanvasTouchController(
     private var lastTapTime = 0L
     private var lastTapId: LayerId? = null
 
-    fun select(id: LayerId?) {
-        if (selectedId == id) return
-        selectedId = id
-        onSelectionChanged(id)
+    fun select(id: LayerId?) = setSelection(setOfNotNull(id))
+
+    fun toggle(id: LayerId) = setSelection(if (id in selectedIds) selectedIds - id else selectedIds + id)
+
+    fun setSelection(ids: Set<LayerId>) {
+        if (selectedIds == ids) return
+        selectedIds = ids
+        onSelectionChanged(ids)
         view.invalidate()
     }
 
-    /** Drops a selection whose layer no longer exists, e.g. after undo. */
+    /** Drops selected layers that no longer exist, e.g. after undo. */
     fun documentChanged(doc: Document) {
-        val id = selectedId
-        if (id != null && doc.layer(id) == null) select(null)
+        setSelection(selectedIds.filterTo(LinkedHashSet()) { doc.layer(it) != null })
         view.invalidate()
     }
 
@@ -105,27 +116,33 @@ class CanvasTouchController(
         moved = false
         val point = toCanvas(event.x, event.y)
         // Locked or hidden layers stay selectable in the panel but can't be moved by touch.
-        val selected = selectedId?.let(doc::layer)?.takeIf { !it.locked && it.visible }
+        val movable = selectedIds.mapNotNull(doc::layer).filter { !it.locked && it.visible }
+        val handle = overlay.handleAt(doc, movable, event.x, event.y)
+        val hit = hitTest.topmost(doc, point)
+        tappedId = hit?.id
 
-        val handle = selected?.let { overlay.handleAt(doc, it, event.x, event.y) }
-        // A finger inside the selected layer keeps it as the target even if another layer covers it.
-        val target = when {
-            handle != null -> selected
-            selected != null && hitTest.contains(doc, selected, point, slop = grabSlop()) -> selected
-            else -> hitTest.topmost(doc, point)
+        // A finger on the selection keeps it as the target even where another layer covers it.
+        val onSelection = handle != null || movable.any { hitTest.contains(doc, it, point, slop = grabSlop()) } ||
+            (movable.size > 1 && groupBounds(doc, movable).contains(point))
+        val targets = when {
+            onSelection -> movable
+            // In multiselect mode a drag never replaces the selection; only taps change it.
+            multiSelectMode -> emptyList()
+            else -> listOfNotNull(hit)
         }
-        targetId = target?.id
+        targetIds = targets.map { it.id }
         mode = when {
-            target == null -> Mode.NONE
+            targets.isEmpty() -> Mode.NONE
             handle == SelectionOverlay.Handle.CORNER -> Mode.CORNER
             handle == SelectionOverlay.Handle.ROTATE -> Mode.ROTATE
             handle == SelectionOverlay.Handle.WIDTH -> Mode.WIDTH
             else -> Mode.MOVE
         }
-        if (target != null) {
-            baseTransform = target.transform
-            currentTransform = target.transform
-            currentWidth = (target as? TextLayer)?.boxWidth ?: 0.0
+        baseTransforms = targets.associate { it.id to it.transform }
+        currentTransforms = baseTransforms
+        currentWidth = (targets.singleOrNull() as? TextLayer)?.boxWidth ?: 0.0
+        if (targets.isNotEmpty()) {
+            groupPivot = targets.singleOrNull()?.transform?.position ?: groupBounds(doc, targets).center
         }
         basePoints.clear()
         basePoints[event.getPointerId(0)] = point
@@ -133,7 +150,7 @@ class CanvasTouchController(
 
     /** A finger was added or lifted: keep the result so far and restart from current positions. */
     private fun rebase(event: MotionEvent) {
-        baseTransform = currentTransform
+        baseTransforms = currentTransforms
         basePoints.clear()
         val lifted = if (event.actionMasked == MotionEvent.ACTION_POINTER_UP) event.actionIndex else -1
         for (i in 0 until event.pointerCount) {
@@ -144,43 +161,59 @@ class CanvasTouchController(
 
     private fun move(event: MotionEvent) {
         val doc = startDoc ?: return
-        val target = targetId?.let(doc::layer) ?: return
+        if (mode == Mode.NONE) return
         if (!moved && hypot(event.x - downX, event.y - downY) < touchSlop) return
         if (!moved) {
             moved = true
-            select(target.id)
+            // Dragging an unselected layer selects it; dragging the selection keeps it.
+            if (targetIds.any { it !in selectedIds }) setSelection(targetIds.toCollection(LinkedHashSet()))
         }
-        val current = (0 until event.pointerCount)
+        val fingers = (0 until event.pointerCount)
             .mapNotNull { i -> basePoints[event.getPointerId(i)]?.let { it to toCanvas(event.getX(i), event.getY(i)) } }
-        if (current.isEmpty()) return
-        val (from, to) = current[0]
+        if (fingers.isEmpty()) return
+        val (from, to) = fingers[0]
+        val single = targetIds.size == 1
         when (mode) {
-            Mode.MOVE -> currentTransform = if (current.size >= 2) {
-                GestureMath.pinch(baseTransform, from, current[1].first, to, current[1].second)
-            } else {
-                GestureMath.drag(baseTransform, from, to)
+            Mode.MOVE -> currentTransforms = baseTransforms.mapValues { (_, base) ->
+                // The same finger motion applied to every layer moves them as one rigid group.
+                if (fingers.size >= 2) GestureMath.pinch(base, from, fingers[1].first, to, fingers[1].second)
+                else GestureMath.drag(base, from, to)
             }
-            Mode.CORNER -> currentTransform = GestureMath.scaleFromCorner(baseTransform, from, to)
-            Mode.ROTATE -> currentTransform = GestureMath.rotateFromHandle(baseTransform, from, to)
-            Mode.WIDTH -> currentWidth = GestureMath.textBoxWidth(baseTransform, to, minTextWidth(target))
+            Mode.CORNER -> {
+                val factor = GestureMath.groupFactor(baseTransforms.values, groupPivot, from, to)
+                currentTransforms = baseTransforms.mapValues { GestureMath.scaleAround(it.value, groupPivot, factor) }
+            }
+            Mode.ROTATE -> currentTransforms = if (single) {
+                baseTransforms.mapValues { GestureMath.rotateFromHandle(it.value, from, to) }
+            } else {
+                val turn = GestureMath.turnDegrees(groupPivot, from, to)
+                baseTransforms.mapValues { GestureMath.rotateAround(it.value, groupPivot, turn) }
+            }
+            Mode.WIDTH -> {
+                val target = doc.layer(targetIds[0]) ?: return
+                currentWidth = GestureMath.textBoxWidth(baseTransforms.getValue(target.id), to, minTextWidth(target))
+            }
             Mode.NONE -> return
         }
-        view.document = doc.withLayerReplaced(previewOf(target))
+        view.document = preview(doc)
     }
 
     private fun finish(event: MotionEvent) {
         val doc = startDoc
-        val target = targetId?.let { doc?.layer(it) }
-        if (doc != null && target != null && moved && mode != Mode.NONE) {
-            commit(commandFor(doc, target))
+        if (doc != null && moved && mode != Mode.NONE) {
+            commandFor(doc)?.let(commit)
         } else if (!moved) {
             view.performClick()
-            tap(event, target)
+            tap(event, tappedId?.let { doc?.layer(it) })
         }
         reset()
     }
 
     private fun tap(event: MotionEvent, target: Layer?) {
+        if (multiSelectMode) {
+            if (target != null) toggle(target.id) else setSelection(emptySet())
+            return
+        }
         val now = event.eventTime
         val isDoubleTap = target != null && target.id == lastTapId && now - lastTapTime <= doubleTapTimeout
         if (isDoubleTap && target is TextLayer) {
@@ -202,20 +235,34 @@ class CanvasTouchController(
     private fun reset() {
         mode = Mode.NONE
         startDoc = null
-        targetId = null
+        targetIds = emptyList()
+        tappedId = null
         basePoints.clear()
     }
 
-    private fun previewOf(target: Layer): Layer =
-        if (mode == Mode.WIDTH && target is TextLayer) target.copy(boxWidth = currentWidth)
-        else target.withTransform(currentTransform)
-
-    private fun commandFor(doc: Document, target: Layer): Command = when (mode) {
-        Mode.WIDTH -> UpdateLayer.of(doc, previewOf(target), "Resize text box")
-        Mode.CORNER -> TransformLayers.of(doc, mapOf(target.id to currentTransform), "Resize")
-        Mode.ROTATE -> TransformLayers.of(doc, mapOf(target.id to currentTransform), "Rotate")
-        else -> TransformLayers.of(doc, mapOf(target.id to currentTransform), "Move")
+    private fun preview(doc: Document): Document = targetIds.fold(doc) { d, id ->
+        val layer = d.layer(id) ?: return@fold d
+        val changed = if (mode == Mode.WIDTH && layer is TextLayer) layer.copy(boxWidth = currentWidth)
+        else layer.withTransform(currentTransforms.getValue(id))
+        d.withLayerReplaced(changed)
     }
+
+    private fun commandFor(doc: Document): Command? {
+        if (targetIds.any { doc.layer(it) == null }) return null
+        if (mode == Mode.WIDTH) {
+            val text = doc.layer(targetIds[0]) as? TextLayer ?: return null
+            return UpdateLayer.of(doc, text.copy(boxWidth = currentWidth), "Resize text box")
+        }
+        val verb = when (mode) {
+            Mode.CORNER -> "Resize"
+            Mode.ROTATE -> "Rotate"
+            else -> "Move"
+        }
+        return TransformLayers.of(doc, currentTransforms, verb)
+    }
+
+    private fun groupBounds(doc: Document, layers: List<Layer>): Rect =
+        Rect.bounding(layers.flatMap { hitTest.corners(doc, it) })
 
     private fun minTextWidth(layer: Layer) = ((layer as? TextLayer)?.style?.fontSize ?: MIN_TEXT_WIDTH)
         .coerceAtLeast(MIN_TEXT_WIDTH)
@@ -225,7 +272,7 @@ class CanvasTouchController(
 
     /** A finger-sized margin in canvas pixels, so small layers stay easy to grab. */
     private fun grabSlop(): Double {
-        val viewScale = sqrt(kotlin.math.abs(view.viewMatrix.determinant)).coerceAtLeast(1e-6)
+        val viewScale = sqrt(abs(view.viewMatrix.determinant)).coerceAtLeast(1e-6)
         return GRAB_SLOP_DP * density / viewScale
     }
 

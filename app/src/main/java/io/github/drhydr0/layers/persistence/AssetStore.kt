@@ -42,6 +42,16 @@ class AssetStore internal constructor(private val dir: File) {
         }
     }
 
+    /**
+     * Deletes stored images not in [keep] and returns how many were removed. Only call
+     * when no import for this project is in flight, or a just-imported image could go.
+     */
+    internal fun deleteExcept(keep: Set<AssetId>): Int {
+        val keepNames = keep.mapTo(mutableSetOf()) { it.sha256 }
+        val stale = dir.listFiles { f -> f.isFile && HASH_NAME.matches(f.name) && f.name !in keepNames }
+        return stale?.count { it.delete() } ?: 0
+    }
+
     /** Leftovers from imports interrupted by a crash. */
     internal fun deleteTempFiles() {
         dir.listFiles { f -> f.name.endsWith(".tmp") }?.forEach { it.delete() }
@@ -49,5 +59,6 @@ class AssetStore internal constructor(private val dir: File) {
 
     private companion object {
         const val BUFFER_SIZE = 64 * 1024
+        val HASH_NAME = Regex("[0-9a-f]{64}")
     }
 }

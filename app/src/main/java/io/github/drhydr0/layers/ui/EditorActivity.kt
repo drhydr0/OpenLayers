@@ -8,6 +8,7 @@ import android.os.Bundle
 import android.view.View
 import android.widget.Button
 import android.widget.ImageButton
+import android.widget.PopupMenu
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
@@ -55,6 +56,8 @@ class EditorActivity : Activity() {
     private lateinit var undoButton: ImageButton
     private lateinit var redoButton: ImageButton
     private lateinit var saveStatus: TextView
+    private lateinit var selectionBar: View
+    private lateinit var selectionCount: TextView
     private val saveTracker = SaveTracker()
     private lateinit var layersPanel: LayersPanel
     private lateinit var layersContainer: View
@@ -78,6 +81,7 @@ class EditorActivity : Activity() {
         setUpTouch()
         setUpLayersPanel()
         setUpNavigation()
+        setUpSelectionBar()
         findViewById<ImageButton>(R.id.editor_export).setOnClickListener {
             val doc = session?.document ?: return@setOnClickListener
             ExportSheet.show(this, doc.canvas, ::runExport)
@@ -108,7 +112,13 @@ class EditorActivity : Activity() {
 
     private fun load() {
         app.io.execute {
-            val result = runCatching { app.projects.load(projectId) }
+            val result = runCatching {
+                val loaded = app.projects.load(projectId)
+                // Safe here: nothing can import into this project until the editor has loaded.
+                runCatching { app.projects.pruneAssets(loaded) }
+                    .onFailure { AppLog.w(TAG, "Image cleanup failed", it) }
+                    .getOrDefault(loaded)
+            }
             runOnUiThread {
                 if (isDestroyed) return@runOnUiThread
                 result.onSuccess { manifest ->
@@ -161,7 +171,10 @@ class EditorActivity : Activity() {
             hitTest = hitTest,
             document = { session?.document },
             commit = { session?.commit(it) },
-            onSelectionChanged = { refreshLayers() },
+            onSelectionChanged = {
+                refreshLayers()
+                refreshSelectionBar()
+            },
             onEditText = ::editText,
         )
         canvasView.setOnTouchListener(touch)
@@ -224,7 +237,46 @@ class EditorActivity : Activity() {
                 if (touch.navigationMode) R.string.editor_navigate_on else R.string.editor_navigate_off,
             )
         }
-        findViewById<ImageButton>(R.id.editor_fit).setOnClickListener { canvasView.fitToScreen() }
+        findViewById<ImageButton>(R.id.editor_more).setOnClickListener(::showMoreMenu)
+    }
+
+    private fun showMoreMenu(anchor: View) {
+        PopupMenu(this, anchor).apply {
+            menu.add(0, MENU_FIT, 0, R.string.editor_menu_fit)
+            menu.add(0, MENU_HISTORY, 1, R.string.editor_menu_history)
+            setOnMenuItemClickListener {
+                when (it.itemId) {
+                    MENU_FIT -> canvasView.fitToScreen()
+                    MENU_HISTORY -> session?.history?.let { h -> HistorySheet.show(this@EditorActivity, h, h::jumpTo) }
+                }
+                true
+            }
+        }.show()
+    }
+
+    private fun setUpSelectionBar() {
+        selectionBar = findViewById(R.id.editor_selection_bar)
+        selectionCount = findViewById(R.id.editor_selection_count)
+        val multi = findViewById<Button>(R.id.editor_multiselect)
+        multi.setOnClickListener {
+            touch.multiSelectMode = !touch.multiSelectMode
+            multi.isActivated = touch.multiSelectMode
+            multi.contentDescription = getString(
+                if (touch.multiSelectMode) R.string.editor_multiselect_on else R.string.editor_multiselect_off,
+            )
+        }
+        findViewById<Button>(R.id.editor_delete_selection).setOnClickListener {
+            val current = session ?: return@setOnClickListener
+            // Locked layers are protected from deletion along with the rest of the selection.
+            val ids = touch.selectedIds.filter { current.document.layer(it)?.locked == false }
+            if (ids.isNotEmpty()) current.commit(RemoveLayers.of(current.document, ids))
+        }
+    }
+
+    private fun refreshSelectionBar() {
+        val count = touch.selectedIds.size
+        selectionBar.visibility = if (count == 0) View.GONE else View.VISIBLE
+        if (count > 0) selectionCount.text = resources.getQuantityString(R.plurals.selection_count, count, count)
     }
 
     private fun setUpLayersPanel() {
@@ -232,7 +284,7 @@ class EditorActivity : Activity() {
         layersEmpty = findViewById(R.id.editor_layers_empty)
         layersPanel = LayersPanel(
             list = findViewById(R.id.editor_layers_list),
-            onSelect = touch::select,
+            onSelect = { id -> if (touch.multiSelectMode) touch.toggle(id) else touch.select(id) },
             onMove = { id, to ->
                 val doc = session?.document ?: return@LayersPanel
                 session?.commit(MoveLayer.of(doc, id, to))
@@ -259,7 +311,7 @@ class EditorActivity : Activity() {
         val doc = session?.document ?: return
         if (layersContainer.visibility != View.VISIBLE) return
         layersEmpty.visibility = if (doc.layers.isEmpty()) View.VISIBLE else View.GONE
-        layersPanel.show(doc, touch.selectedId)
+        layersPanel.show(doc, touch.selectedIds)
     }
 
     private fun askRenameLayer(layer: Layer) {
@@ -389,6 +441,8 @@ class EditorActivity : Activity() {
         private const val EXTRA_PROJECT_ID = "project_id"
         private const val REQUEST_ADD_IMAGE = 1
         private const val DISABLED_ALPHA = 0.38f
+        private const val MENU_FIT = 1
+        private const val MENU_HISTORY = 2
         private const val PROGRESS_PADDING = 48
 
         fun intent(context: Context, projectId: String) =

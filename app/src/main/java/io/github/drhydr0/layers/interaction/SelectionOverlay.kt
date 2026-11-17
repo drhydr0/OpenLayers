@@ -7,16 +7,21 @@ import io.github.drhydr0.layers.R
 import io.github.drhydr0.layers.document.Document
 import io.github.drhydr0.layers.document.Layer
 import io.github.drhydr0.layers.document.LayerId
+import io.github.drhydr0.layers.document.Rect
 import io.github.drhydr0.layers.document.TextLayer
 import io.github.drhydr0.layers.document.Vec2
 import io.github.drhydr0.layers.render.DocumentView
 import kotlin.math.hypot
 
-/** Draws the selection outline and handles, and finds which handle a touch lands on. */
+/**
+ * Draws the selection outline and handles, and finds which handle a touch lands on.
+ * One layer gets handles on its own (possibly rotated) box. Several layers get one
+ * upright bounding box with shared handles.
+ */
 class SelectionOverlay(
     private val view: DocumentView,
     private val hitTest: HitTest,
-    private val selectedId: () -> LayerId?,
+    private val selectedIds: () -> Set<LayerId>,
 ) {
     enum class Handle { CORNER, ROTATE, WIDTH }
 
@@ -31,24 +36,32 @@ class SelectionOverlay(
         strokeWidth = 2 * density
         color = accent
     }
+    private val memberPaint = Paint(outlinePaint).apply { strokeWidth = density }
     private val handleFill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFFFFFFF.toInt() }
     private val handleStroke = Paint(outlinePaint)
     private val path = Path()
 
-    /** Screen positions of each handle for [layer]. */
-    private fun handles(doc: Document, layer: Layer): List<Pair<Handle, Vec2>> {
-        val c = hitTest.corners(doc, layer).map(view.viewMatrix::map)
+    /** The box the handles sit on, in screen coordinates: top-left, top-right, bottom-right, bottom-left. */
+    private fun box(doc: Document, layers: List<Layer>): List<Vec2> {
+        layers.singleOrNull()?.let { return hitTest.corners(doc, it).map(view.viewMatrix::map) }
+        val b = Rect.bounding(layers.flatMap { hitTest.corners(doc, it) }.map(view.viewMatrix::map))
+        return listOf(Vec2(b.left, b.top), Vec2(b.right, b.top), Vec2(b.right, b.bottom), Vec2(b.left, b.bottom))
+    }
+
+    /** Screen positions of each handle for the movable [layers]. */
+    private fun handles(doc: Document, layers: List<Layer>): List<Pair<Handle, Vec2>> {
+        if (layers.isEmpty()) return emptyList()
+        val c = box(doc, layers)
         val topMid = mid(c[0], c[1])
-        val center = mid(c[0], c[2])
-        val up = normalize(topMid - center)
+        val up = normalize(topMid - mid(c[0], c[2]))
         val list = c.map { Handle.CORNER to it }.toMutableList()
         list += Handle.ROTATE to (topMid + up * rotateOffset.toDouble())
-        if (layer is TextLayer) list += Handle.WIDTH to mid(c[1], c[2])
+        if (layers.singleOrNull() is TextLayer) list += Handle.WIDTH to mid(c[1], c[2])
         return list
     }
 
-    fun handleAt(doc: Document, layer: Layer, x: Float, y: Float): Handle? =
-        handles(doc, layer)
+    fun handleAt(doc: Document, layers: List<Layer>, x: Float, y: Float): Handle? =
+        handles(doc, layers)
             .map { (h, p) -> h to hypot(p.x - x, p.y - y) }
             .filter { it.second <= touchRadius }
             // Rotate and width handles win ties: they're smaller targets near corners.
@@ -56,16 +69,18 @@ class SelectionOverlay(
             ?.first
 
     fun draw(canvas: Canvas, doc: Document) {
-        val layer = selectedId()?.let(doc::layer) ?: return
-        val c = hitTest.corners(doc, layer).map(view.viewMatrix::map)
-        path.reset()
-        path.moveTo(c[0].x.toFloat(), c[0].y.toFloat())
-        c.drop(1).forEach { path.lineTo(it.x.toFloat(), it.y.toFloat()) }
-        path.close()
-        canvas.drawPath(path, outlinePaint)
-        if (layer.locked || !layer.visible) return
+        val selected = selectedIds().mapNotNull(doc::layer)
+        if (selected.isEmpty()) return
+        if (selected.size > 1) selected.forEach { outline(canvas, hitTest.corners(doc, it).map(view.viewMatrix::map), memberPaint) }
 
-        val all = handles(doc, layer)
+        // Locked or hidden layers show an outline but take no part in handles.
+        val movable = selected.filter { !it.locked && it.visible }
+        val boxLayers = movable.ifEmpty { if (selected.size == 1) selected else return }
+        val c = box(doc, boxLayers)
+        outline(canvas, c, outlinePaint)
+        if (movable.isEmpty()) return
+
+        val all = handles(doc, movable)
         val topMid = mid(c[0], c[1])
         all.firstOrNull { it.first == Handle.ROTATE }?.second?.let {
             canvas.drawLine(topMid.x.toFloat(), topMid.y.toFloat(), it.x.toFloat(), it.y.toFloat(), outlinePaint)
@@ -74,6 +89,14 @@ class SelectionOverlay(
             canvas.drawCircle(p.x.toFloat(), p.y.toFloat(), handleRadius, handleFill)
             canvas.drawCircle(p.x.toFloat(), p.y.toFloat(), handleRadius, handleStroke)
         }
+    }
+
+    private fun outline(canvas: Canvas, corners: List<Vec2>, paint: Paint) {
+        path.reset()
+        path.moveTo(corners[0].x.toFloat(), corners[0].y.toFloat())
+        corners.drop(1).forEach { path.lineTo(it.x.toFloat(), it.y.toFloat()) }
+        path.close()
+        canvas.drawPath(path, paint)
     }
 
     private fun mid(a: Vec2, b: Vec2) = Vec2((a.x + b.x) / 2, (a.y + b.y) / 2)

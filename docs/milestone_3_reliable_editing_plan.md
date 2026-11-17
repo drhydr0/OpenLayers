@@ -31,16 +31,22 @@ Deferred, with reasons:
 
 ## Steps
 
-| # | Step | Verified by |
-| --- | --- | --- |
-| 1 | Close Editable canvas, add this plan | Review |
-| 2 | Serializable commands and manifest format v2 with history, v1 migration | JVM tests |
-| 3 | Save and load history with the document; history cap; interrupted-write tests | JVM tests |
-| 4 | Editor restores history on open; "Saved" indicator and save-failure message | JVM tests, phone test |
-| 5 | Lock and visibility commands, panel toggles, touch rules | JVM tests, phone test |
-| 6 | Multiselect with shared transforms and multi-delete | JVM tests, phone test |
-| 7 | History sheet with jump to state | JVM tests, phone test |
-| 8 | Asset cleanup that respects history | JVM tests |
-| 9 | Docs and the combined phone test | Phone test |
+All 9 steps are built. Related steps were combined into one PR where that saved a round of CI.
 
-As in M2, steps that need no phone check are merged once CI passes, and the phone checks are collected into one test at the end.
+| # | Step | PR | Verified by |
+| --- | --- | --- | --- |
+| 1 | Close Editable canvas, add this plan | #17 | Review |
+| 2 | Serializable commands and manifest format v2 with history, v1 migration | #18 | JVM tests |
+| 3 | Save and load history with the document; history cap; interrupted-write tests | #18 | JVM tests |
+| 4 | Editor restores history on open; "Saved" indicator and retry after a failed save | #18, #19 | JVM tests, phone test |
+| 5 | Lock and visibility commands, panel toggles, touch rules | #19 | JVM tests, phone test |
+| 6 | Multiselect with shared transforms and multi-delete | final PR | JVM tests, phone test |
+| 7 | History list with jump to state | final PR | JVM tests, phone test |
+| 8 | Image cleanup that respects history | final PR | JVM tests |
+| 9 | Docs and the combined phone test | final PR | Phone test |
+
+Notes:
+
+- Image cleanup runs when a project is opened, before anything can be imported into it, so a just-imported image can never be removed.
+- The fit-to-screen button moved into a new **⋮** menu to make room for History.
+- Rendering and gestures still have no automated tests (emulator tests are planned for M7), so `milestone_3_phone_test.md` covers them.
