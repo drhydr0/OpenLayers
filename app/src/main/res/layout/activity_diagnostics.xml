@@ -43,6 +43,16 @@
             android:text="@string/diagnostics_test_crash" />
     </LinearLayout>
 
+    <!-- Debug builds only: builds a heavy project for measuring on the phone. -->
+    <Button
+        android:id="@+id/stress_project"
+        style="?android:attr/borderlessButtonStyle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:contentDescription="@string/diagnostics_stress_description"
+        android:minHeight="48dp"
+        android:text="@string/diagnostics_stress" />
+
     <ScrollView
         android:layout_width="match_parent"
         android:layout_height="0dp"
