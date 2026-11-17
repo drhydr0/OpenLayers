@@ -67,6 +67,7 @@ class ProjectsActivity : Activity() {
         adapter = ProjectListAdapter(
             onOpen = ::openProject,
             onRename = ::askRename,
+            onDuplicate = ::duplicateProject,
             onDelete = ::askDelete,
         )
         findViewById<RecyclerView>(R.id.project_list).apply {
@@ -186,6 +187,19 @@ class ProjectsActivity : Activity() {
             }
             .setNegativeButton(android.R.string.cancel, null)
             .show()
+    }
+
+    /** An independent copy with its own images and undo history. */
+    private fun duplicateProject(info: ProjectInfo) {
+        val name = getString(R.string.projects_copy_name, info.name)
+        app.io.execute {
+            val result = runCatching { app.projects.duplicate(info.id, name, System.currentTimeMillis()) }
+            runOnUiThread {
+                result.onSuccess { AppLog.i(TAG, "Duplicated project ${info.id}") }
+                    .onFailure { showError(R.string.projects_duplicate_failed, it) }
+                refresh()
+            }
+        }
     }
 
     private fun askDelete(info: ProjectInfo) {

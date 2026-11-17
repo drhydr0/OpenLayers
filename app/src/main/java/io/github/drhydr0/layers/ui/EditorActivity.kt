@@ -278,6 +278,7 @@ class EditorActivity : Activity() {
             menu.add(0, MENU_FIT, 0, R.string.editor_menu_fit)
             menu.add(0, MENU_HISTORY, 1, R.string.editor_menu_history)
             menu.add(0, MENU_AREA, 2, R.string.editor_menu_area)
+            menu.add(0, MENU_CHECKPOINT, 4, R.string.editor_menu_checkpoint)
             menu.add(0, MENU_SNAPPING, 3, R.string.editor_menu_snapping).apply {
                 isCheckable = true
                 isChecked = touch.snappingEnabled
@@ -287,6 +288,7 @@ class EditorActivity : Activity() {
                     MENU_FIT -> canvasView.fitToScreen()
                     MENU_HISTORY -> session?.history?.let { h -> HistorySheet.show(this@EditorActivity, h, h::jumpTo) }
                     MENU_SNAPPING -> touch.snappingEnabled = !touch.snappingEnabled
+                    MENU_CHECKPOINT -> askCheckpoint()
                     MENU_AREA -> if (session != null) {
                         AreaSelectSheet.show(this@EditorActivity, touch.selectedIds.size, ::startArea)
                     }
@@ -336,6 +338,40 @@ class EditorActivity : Activity() {
             val ids = touch.selectedIds.filter { current.document.layer(it)?.locked == false }
             if (ids.isNotEmpty()) current.commit(RemoveLayers.of(current.document, ids))
         }
+    }
+
+    /**
+     * A named checkpoint: the project as it is now, saved as a separate copy with its undo
+     * history, so an experiment can always be abandoned by opening the copy.
+     */
+    private fun askCheckpoint() {
+        val current = session ?: return
+        val input = EditText(this).apply {
+            setText(getString(R.string.checkpoint_default_name, current.info.name))
+            setSelectAllOnFocus(true)
+            hint = getString(R.string.checkpoint_name_hint)
+        }
+        AlertDialog.Builder(this)
+            .setTitle(R.string.checkpoint_title)
+            .setMessage(R.string.checkpoint_message)
+            .setView(input)
+            .setPositiveButton(R.string.checkpoint_save) { _, _ ->
+                val name = input.text.toString().trim().ifEmpty { getString(R.string.checkpoint_default_name, current.info.name) }
+                // The state on screen now, not whatever save happens to be on disk.
+                val snapshot = ProjectManifest(current.info, current.document, current.history.snapshot())
+                app.io.execute {
+                    val result = runCatching { app.projects.saveCopy(snapshot, name, System.currentTimeMillis()) }
+                    result.onFailure { AppLog.e(TAG, "Checkpoint failed", it) }
+                    runOnUiThread {
+                        if (isDestroyed) return@runOnUiThread
+                        Toast.makeText(
+                            this, if (result.isSuccess) R.string.checkpoint_saved else R.string.checkpoint_failed, Toast.LENGTH_LONG,
+                        ).show()
+                    }
+                }
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
     }
 
     /** Starts drawing an area. The layers to copy from are fixed now, so the scope can't drift. */
@@ -495,7 +531,10 @@ class EditorActivity : Activity() {
                 spread.add(GROUP_DISTRIBUTE, Distribution.HORIZONTAL.ordinal, 0, R.string.distribute_horizontal)
                 spread.add(GROUP_DISTRIBUTE, Distribution.VERTICAL.ordinal, 1, R.string.distribute_vertical)
             }
-            if (selected.size == 1) menu.add(0, ACTION_OPACITY, 3, R.string.action_opacity)
+            if (selected.size == 1) {
+                menu.add(0, ACTION_PRECISION, 3, R.string.action_precision)
+                menu.add(0, ACTION_OPACITY, 3, R.string.action_opacity)
+            }
             menu.add(0, ACTION_MAKE_STICKER, 4, R.string.action_make_sticker)
             menu.add(0, ACTION_SAVE_STICKER, 5, R.string.action_save_sticker)
             if (singleGroup != null) {
@@ -523,6 +562,11 @@ class EditorActivity : Activity() {
                     ACTION_UNGROUP -> singleGroup?.let(::ungroup)
                     ACTION_EDIT_GROUP -> singleGroup?.let { g -> touch.enterScope(g.id) }
                     ACTION_OPACITY -> selected.singleOrNull()?.let(::askOpacity)
+                    ACTION_PRECISION -> selected.singleOrNull()?.let { layer ->
+                        PrecisionSheet.show(this@EditorActivity, layer.transform) { typed ->
+                            session?.let { s -> s.commit(TransformLayers.of(s.document, mapOf(layer.id to typed), "Place")) }
+                        }
+                    }
                     ACTION_MAKE_STICKER -> makeSticker()
                     ACTION_SAVE_STICKER -> askSaveSticker()
                 }
@@ -960,6 +1004,8 @@ class EditorActivity : Activity() {
         private const val ACTION_MAKE_STICKER = 5
         private const val ACTION_SAVE_STICKER = 6
         private const val ACTION_OPACITY = 7
+        private const val ACTION_PRECISION = 8
+        private const val MENU_CHECKPOINT = 5
         private const val OPACITY_STEPS = 100
         private const val DUPLICATE_OFFSET_FRACTION = 0.04
         private const val BYTES_PER_PIXEL = 4

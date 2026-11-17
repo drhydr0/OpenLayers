@@ -16,6 +16,7 @@ import io.github.drhydr0.layers.persistence.format.ProjectInfo
 class ProjectListAdapter(
     private val onOpen: (ProjectInfo) -> Unit,
     private val onRename: (ProjectInfo) -> Unit,
+    private val onDuplicate: (ProjectInfo) -> Unit,
     private val onDelete: (ProjectInfo) -> Unit,
 ) : RecyclerView.Adapter<ProjectListAdapter.Row>() {
 
@@ -67,10 +68,12 @@ class ProjectListAdapter(
         private fun showMenu(anchor: View, info: ProjectInfo) {
             PopupMenu(anchor.context, anchor).apply {
                 menu.add(0, MENU_RENAME, 0, R.string.projects_rename)
-                menu.add(0, MENU_DELETE, 1, R.string.projects_delete)
+                menu.add(0, MENU_DUPLICATE, 1, R.string.projects_duplicate)
+                menu.add(0, MENU_DELETE, 2, R.string.projects_delete)
                 setOnMenuItemClickListener {
                     when (it.itemId) {
                         MENU_RENAME -> onRename(info)
+                        MENU_DUPLICATE -> onDuplicate(info)
                         MENU_DELETE -> onDelete(info)
                     }
                     true
@@ -82,5 +85,6 @@ class ProjectListAdapter(
     private companion object {
         const val MENU_RENAME = 1
         const val MENU_DELETE = 2
+        const val MENU_DUPLICATE = 3
     }
 }
