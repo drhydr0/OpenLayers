@@ -4,4 +4,23 @@
     <string name="start_version">Version %1$s (%2$d)</string>
     <!-- %1$s = short git commit hash -->
     <string name="start_commit">Commit %1$s</string>
+    <string name="start_open_diagnostics">Diagnostics</string>
+    <string name="start_open_diagnostics_description">Open diagnostics screen</string>
+
+    <string name="crash_dialog_title">Layers crashed</string>
+    <string name="crash_dialog_message">Layers stopped unexpectedly last time. Share the crash report so the problem can be fixed?</string>
+    <string name="crash_dialog_share">Share report</string>
+    <string name="crash_dialog_dismiss">Dismiss</string>
+    <string name="crash_report_subject">Layers crash report</string>
+    <string name="share_chooser_title">Share report</string>
+
+    <string name="diagnostics_title">Diagnostics</string>
+    <string name="diagnostics_loading">Collecting diagnostics…</string>
+    <string name="diagnostics_subject">Layers diagnostics</string>
+    <string name="diagnostics_refresh">Refresh</string>
+    <string name="diagnostics_refresh_description">Refresh diagnostics</string>
+    <string name="diagnostics_share">Share</string>
+    <string name="diagnostics_share_description">Share diagnostics report</string>
+    <string name="diagnostics_test_crash">Test crash</string>
+    <string name="diagnostics_test_crash_description">Crash the app on purpose to test crash reports</string>
 </resources>

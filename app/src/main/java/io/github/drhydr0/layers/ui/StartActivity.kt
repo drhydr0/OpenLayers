@@ -4,15 +4,22 @@
 package io.github.drhydr0.layers.ui
 
 import android.app.Activity
+import android.app.AlertDialog
+import android.content.Intent
 import android.os.Bundle
 import android.view.View
-import android.view.WindowInsets
+import android.widget.Button
 import android.widget.TextView
 import io.github.drhydr0.layers.BuildConfig
+import io.github.drhydr0.layers.LayersApp
 import io.github.drhydr0.layers.R
+import io.github.drhydr0.layers.diagnostics.AppLog
+import io.github.drhydr0.layers.platform.shareText
 
 /** Start screen. Shows the build identity so a screenshot pins down the exact code. */
 class StartActivity : Activity() {
+
+    private val app get() = application as LayersApp
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -22,19 +29,45 @@ class StartActivity : Activity() {
             getString(R.string.start_version, BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE)
         findViewById<TextView>(R.id.commit).text =
             getString(R.string.start_commit, BuildConfig.COMMIT_HASH)
+        findViewById<Button>(R.id.open_diagnostics).setOnClickListener {
+            startActivity(Intent(this, DiagnosticsActivity::class.java))
+        }
+        findViewById<View>(R.id.root).padForSystemBars()
 
-        applySystemBarInsets(findViewById(R.id.root))
+        AppLog.i(TAG, "Start screen shown")
+        // Only on a fresh launch, so rotating the screen doesn't ask twice.
+        if (savedInstanceState == null) offerPendingCrashReport()
     }
 
-    // targetSdk 35+ draws edge to edge, so content must be padded away from the system bars.
-    private fun applySystemBarInsets(root: View) {
-        val base = root.paddingLeft
-        root.setOnApplyWindowInsetsListener { view, insets ->
-            val bars = insets.getInsets(
-                WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout(),
-            )
-            view.setPadding(base + bars.left, base + bars.top, base + bars.right, base + bars.bottom)
-            insets
+    private fun offerPendingCrashReport() {
+        app.io.execute {
+            val report = app.crashReports.read() ?: return@execute
+            runOnUiThread { if (!isFinishing && !isDestroyed) showCrashDialog(report) }
         }
+    }
+
+    private fun showCrashDialog(report: String) {
+        AlertDialog.Builder(this)
+            .setTitle(R.string.crash_dialog_title)
+            .setMessage(R.string.crash_dialog_message)
+            .setCancelable(false)
+            .setPositiveButton(R.string.crash_dialog_share) { _, _ ->
+                shareText(
+                    subject = getString(R.string.crash_report_subject),
+                    text = report,
+                    chooserTitle = getString(R.string.share_chooser_title),
+                )
+                deleteCrashReport()
+            }
+            .setNegativeButton(R.string.crash_dialog_dismiss) { _, _ -> deleteCrashReport() }
+            .show()
+    }
+
+    private fun deleteCrashReport() {
+        app.io.execute { app.crashReports.delete() }
+    }
+
+    private companion object {
+        const val TAG = "StartActivity"
     }
 }
