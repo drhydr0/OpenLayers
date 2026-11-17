@@ -7,6 +7,7 @@ import android.content.Intent
 import android.os.Bundle
 import android.view.View
 import android.widget.Button
+import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.PopupMenu
 import android.widget.ProgressBar
@@ -22,6 +23,8 @@ import io.github.drhydr0.layers.document.Layer
 import io.github.drhydr0.layers.document.LayerId
 import io.github.drhydr0.layers.document.Placement
 import io.github.drhydr0.layers.document.Rect
+import io.github.drhydr0.layers.document.Sticker
+import io.github.drhydr0.layers.document.Stickers
 import io.github.drhydr0.layers.document.TextLayer
 import io.github.drhydr0.layers.document.TextStyle
 import io.github.drhydr0.layers.document.Transform
@@ -43,6 +46,7 @@ import io.github.drhydr0.layers.render.DocumentView
 import io.github.drhydr0.layers.render.ExportOptions
 import io.github.drhydr0.layers.render.Exporter
 import io.github.drhydr0.layers.render.PreviewImages
+import io.github.drhydr0.layers.render.StickerThumbnails
 import io.github.drhydr0.layers.render.ThumbnailRenderer
 import java.util.concurrent.CancellationException
 
@@ -79,6 +83,9 @@ class EditorActivity : Activity() {
             if (session != null) ImagePicker.launch(this, REQUEST_ADD_IMAGE)
         }
         findViewById<Button>(R.id.editor_add_text).setOnClickListener { addText() }
+        findViewById<Button>(R.id.editor_add_sticker).setOnClickListener {
+            if (session != null) StickerPicker(this, ::insertSticker).show()
+        }
         undoButton = findViewById<ImageButton>(R.id.editor_undo).apply { setOnClickListener { session?.history?.undo() } }
         redoButton = findViewById<ImageButton>(R.id.editor_redo).apply { setOnClickListener { session?.history?.redo() } }
         saveStatus = findViewById<TextView>(R.id.editor_save_status).apply {
@@ -305,6 +312,8 @@ class EditorActivity : Activity() {
         PopupMenu(this, anchor).apply {
             menu.add(0, ACTION_DUPLICATE, 0, R.string.action_duplicate)
             menu.add(0, ACTION_GROUP, 1, R.string.action_group)
+            menu.add(0, ACTION_MAKE_STICKER, 4, R.string.action_make_sticker)
+            menu.add(0, ACTION_SAVE_STICKER, 5, R.string.action_save_sticker)
             if (singleGroup != null) {
                 menu.add(0, ACTION_UNGROUP, 2, R.string.action_ungroup)
                 menu.add(0, ACTION_EDIT_GROUP, 3, R.string.action_edit_group)
@@ -315,6 +324,8 @@ class EditorActivity : Activity() {
                     ACTION_GROUP -> groupSelection()
                     ACTION_UNGROUP -> singleGroup?.let(::ungroup)
                     ACTION_EDIT_GROUP -> singleGroup?.let { g -> touch.enterScope(g.id) }
+                    ACTION_MAKE_STICKER -> makeSticker()
+                    ACTION_SAVE_STICKER -> askSaveSticker()
                 }
                 true
             }
@@ -329,6 +340,91 @@ class EditorActivity : Activity() {
         val command = AddLayers.duplicates(doc, touch.selectedIds, Vec2(offset, offset), LayerId::random)
         current.commit(command)
         touch.setSelection(command.placements.mapTo(LinkedHashSet()) { it.layer.id })
+    }
+
+    /** An editable sticker: the selection copied as one independent object; originals stay. */
+    private fun makeSticker() {
+        val current = session ?: return
+        val doc = current.document
+        val center = touch.selectionCenter(doc) ?: return
+        val offset = doc.canvas.width * DUPLICATE_OFFSET_FRACTION
+        val command = AddLayers.sticker(
+            doc, touch.selectedIds, center, Vec2(offset, offset), getString(R.string.default_sticker_name), LayerId::random,
+        )
+        current.commit(command)
+        touch.setSelection(command.placements.mapTo(LinkedHashSet()) { it.layer.id })
+    }
+
+    private fun askSaveSticker() {
+        val current = session ?: return
+        val doc = current.document
+        // Keep stacking order, whatever order the layers were tapped in.
+        val layers = doc.children(touch.scopeId).filter { it.id in touch.selectedIds }
+        val center = touch.selectionCenter(doc) ?: return
+        if (layers.isEmpty()) return
+        val input = EditText(this).apply {
+            setText(layers.singleOrNull()?.name ?: getString(R.string.default_sticker_name))
+            setSelectAllOnFocus(true)
+            hint = getString(R.string.sticker_name_hint)
+        }
+        AlertDialog.Builder(this)
+            .setTitle(R.string.sticker_save_title)
+            .setView(input)
+            .setPositiveButton(R.string.sticker_save_confirm) { _, _ ->
+                val name = input.text.toString().trim().ifEmpty { getString(R.string.default_sticker_name) }
+                val content = Stickers.contentOf(layers, center, name, LayerId::random)
+                saveSticker(Stickers.create(app.stickers.newStickerId(), name, System.currentTimeMillis(), content, doc.assets))
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun saveSticker(sticker: Sticker) {
+        val projectAssets = app.projects.assets(projectId)
+        app.io.execute {
+            val result = runCatching { app.stickers.save(sticker) { projectAssets.file(it) } }
+            if (result.isSuccess) {
+                app.thumbnails.execute {
+                    runCatching {
+                        app.stickers.writeThumbnail(sticker.id) { out ->
+                            StickerThumbnails.writePng(sticker, { app.stickers.assets(sticker.id).file(it) }, out)
+                        }
+                    }.onFailure { AppLog.w(TAG, "Sticker thumbnail failed", it) }
+                }
+            }
+            runOnUiThread {
+                if (isDestroyed) return@runOnUiThread
+                result.onSuccess { AppLog.i(TAG, "Saved sticker with ${sticker.assets.size} images") }
+                    .onFailure { AppLog.e(TAG, "Sticker save failed", it) }
+                Toast.makeText(
+                    this, if (result.isSuccess) R.string.sticker_saved else R.string.sticker_save_failed, Toast.LENGTH_SHORT,
+                ).show()
+            }
+        }
+    }
+
+    /** Copies the sticker's images into this project, then adds a new independent instance. */
+    private fun insertSticker(sticker: Sticker) {
+        val projectAssets = app.projects.assets(projectId)
+        val stickerAssets = app.stickers.assets(sticker.id)
+        app.io.execute {
+            val result = runCatching {
+                sticker.assets.forEach { if (!projectAssets.contains(it.id)) projectAssets.importFile(stickerAssets.file(it.id)) }
+            }
+            runOnUiThread {
+                val current = session ?: return@runOnUiThread
+                result.onSuccess {
+                    val doc = current.document
+                    val instance = Stickers.instantiate(sticker, doc.canvas.bounds.center, LayerId::random)
+                    current.commit(AddLayers.insertSticker(doc, instance, sticker.assets))
+                    touch.enterScope(null)
+                    touch.select(instance.id)
+                }.onFailure {
+                    AppLog.e(TAG, "Sticker insert failed", it)
+                    if (!isDestroyed) Toast.makeText(this, R.string.sticker_insert_failed, Toast.LENGTH_LONG).show()
+                }
+            }
+        }
     }
 
     private fun groupSelection() {
@@ -533,6 +629,8 @@ class EditorActivity : Activity() {
         private const val ACTION_GROUP = 2
         private const val ACTION_UNGROUP = 3
         private const val ACTION_EDIT_GROUP = 4
+        private const val ACTION_MAKE_STICKER = 5
+        private const val ACTION_SAVE_STICKER = 6
         private const val DUPLICATE_OFFSET_FRACTION = 0.04
         private const val MENU_FIT = 1
         private const val MENU_HISTORY = 2

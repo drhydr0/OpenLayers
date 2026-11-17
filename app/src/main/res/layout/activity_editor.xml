@@ -213,6 +213,18 @@
             android:text="@string/editor_add_text" />
 
         <Button
+            android:id="@+id/editor_add_sticker"
+            style="?android:attr/buttonBarButtonStyle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:contentDescription="@string/editor_add_sticker_description"
+            android:maxLines="1"
+            android:minHeight="56dp"
+            android:paddingHorizontal="2dp"
+            android:text="@string/editor_add_sticker" />
+
+        <Button
             android:id="@+id/editor_multiselect"
             style="?android:attr/buttonBarButtonStyle"
             android:layout_width="0dp"

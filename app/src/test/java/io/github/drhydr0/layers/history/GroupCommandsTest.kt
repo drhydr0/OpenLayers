@@ -111,6 +111,45 @@ class GroupCommandsTest {
     }
 
     @Test
+    fun makeStickerCopiesSelectionAsOneObjectAndKeepsOriginals() {
+        var n = 0
+        val cmd = AddLayers.sticker(base, listOf(LayerId("a"), LayerId("b")), Vec2(10.0, 10.0), Vec2(20.0, 20.0), "Sticker") { LayerId("s${n++}") }
+        assertEquals("Create sticker", cmd.label)
+        roundTrip(cmd) {
+            assertEquals(listOf("a", "b", "s0", "outer", "c"), ids(it).map { id -> if (id.startsWith("s")) "s0" else id })
+            val sticker = it.layers[2] as GroupLayer
+            assertEquals("Sticker", sticker.name)
+            assertEquals(2, sticker.children.size)
+            assertVec(Vec2(30.0, 30.0), sticker.transform.position)
+            // Originals untouched.
+            assertEquals(base.requireLayer(LayerId("a")), it.requireLayer(LayerId("a")))
+        }
+    }
+
+    @Test
+    fun makeStickerFromOneLayerKeepsItsPlacePlusOffset() {
+        var n = 0
+        val moved = TransformLayers.of(base, mapOf(LayerId("c") to Transform(Vec2(200.0, 300.0)))).apply(base)
+        val cmd = AddLayers.sticker(moved, listOf(LayerId("c")), Vec2(200.0, 300.0), Vec2(20.0, 20.0), "Sticker") { LayerId("s${n++}") }
+        roundTrip(cmd, moved) {
+            assertVec(Vec2(220.0, 320.0), it.layers.last().transform.position)
+            assertEquals(5, it.layers.size)
+        }
+    }
+
+    @Test
+    fun insertStickerAddsLayersAndTheirImagesInOneStep() {
+        val other = imageAsset('e')
+        val instance = GroupLayer(LayerId("inst"), "Sticker", listOf(imageLayer("p2", other)))
+        val cmd = AddLayers.insertSticker(base, instance, listOf(other))
+        assertEquals("Insert sticker", cmd.label)
+        val after = cmd.apply(base)
+        assertEquals("inst", after.layers.last().id.value)
+        assertTrue(other.id in after.assets)
+        assertEquals(base.layers, cmd.revert(after).layers)
+    }
+
+    @Test
     fun removeSkipsLayersInsideAnotherRemovedLayerAndRestoresNesting() {
         val cmd = RemoveLayers.of(base, listOf(LayerId("deep2"), LayerId("outer"), LayerId("a")))
         assertEquals("Delete 2 layers", cmd.label)
