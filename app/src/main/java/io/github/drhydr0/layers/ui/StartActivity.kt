@@ -35,8 +35,10 @@ class StartActivity : Activity() {
         findViewById<View>(R.id.root).padForSystemBars()
 
         AppLog.i(TAG, "Start screen shown")
-        // Only on a fresh launch, so rotating the screen doesn't ask twice.
-        if (savedInstanceState == null) offerPendingCrashReport()
+        // Ask whenever a report is waiting, not only on a "fresh" launch: after a crash,
+        // Android relaunches this screen from saved state. The report is deleted once
+        // answered, so a rotation re-asks only if the question is still open.
+        offerPendingCrashReport()
     }
 
     private fun offerPendingCrashReport() {
