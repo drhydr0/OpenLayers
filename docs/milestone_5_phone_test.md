@@ -36,5 +36,5 @@ Use a project with a white background, a photo, and some text that overlaps the 
 ## Zoomed in, and reuse
 
 13. Zoom in with the hand button, turn the hand off, and copy a small area. The sticker is sharp: it has the picture's own pixels, not the screen's.
-14. Select an image sticker and use **Actions → Save to sticker collection**. Insert it into another project from **Sticker**.
+14. Select an image sticker and use **Actions → Save to sticker collection**. Insert it into another project from **Add → Sticker from collection**.
 15. Swipe the app away and reopen the project: the image stickers are still there, and Undo still works.

@@ -41,6 +41,7 @@ object Grouping {
     fun copy(layer: Layer, newId: () -> LayerId): Layer = when (layer) {
         is ImageLayer -> layer.copy(id = newId())
         is TextLayer -> layer.copy(id = newId())
+        is ShapeLayer -> layer.copy(id = newId())
         is GroupLayer -> layer.copy(id = newId(), children = layer.children.map { copy(it, newId) })
     }
 

@@ -17,6 +17,7 @@ import io.github.drhydr0.layers.document.GroupLayer
 import io.github.drhydr0.layers.document.ImageLayer
 import io.github.drhydr0.layers.document.Layer
 import io.github.drhydr0.layers.document.LayerId
+import io.github.drhydr0.layers.document.ShapeLayer
 import io.github.drhydr0.layers.document.TextLayer
 
 /**
@@ -178,6 +179,10 @@ class LayersPanel(
                 is TextLayer -> {
                     icon.setImageResource(R.drawable.ic_layer_text)
                     detail.text = layer.text.lineSequence().first().take(PREVIEW_CHARS)
+                }
+                is ShapeLayer -> {
+                    icon.setImageResource(R.drawable.ic_layer_shape)
+                    detail.setText(R.string.layers_kind_shape)
                 }
                 is GroupLayer -> {
                     val open = layer.id in expanded

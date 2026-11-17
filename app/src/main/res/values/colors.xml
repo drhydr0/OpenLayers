@@ -5,4 +5,5 @@
     <color name="canvas_edge">#66FFFFFF</color>
     <color name="selection_accent">#FF2196F3</color>
     <color name="layer_row_selected">#552196F3</color>
+    <color name="snap_guide">#FFE91E63</color>
 </resources>

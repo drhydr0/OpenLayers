@@ -244,36 +244,14 @@
         style="?android:attr/buttonBarStyle">
 
         <Button
-            android:id="@+id/editor_add_image"
+            android:id="@+id/editor_add"
             style="?android:attr/buttonBarButtonStyle"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:contentDescription="@string/editor_add_image_description"
+            android:contentDescription="@string/editor_add_description"
             android:minHeight="56dp"
-            android:text="@string/editor_add_image" />
-
-        <Button
-            android:id="@+id/editor_add_text"
-            style="?android:attr/buttonBarButtonStyle"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:contentDescription="@string/editor_add_text_description"
-            android:minHeight="56dp"
-            android:text="@string/editor_add_text" />
-
-        <Button
-            android:id="@+id/editor_add_sticker"
-            style="?android:attr/buttonBarButtonStyle"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:contentDescription="@string/editor_add_sticker_description"
-            android:maxLines="1"
-            android:minHeight="56dp"
-            android:paddingHorizontal="2dp"
-            android:text="@string/editor_add_sticker" />
+            android:text="@string/editor_add" />
 
         <Button
             android:id="@+id/editor_multiselect"

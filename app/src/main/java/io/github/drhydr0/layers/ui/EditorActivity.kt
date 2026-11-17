@@ -19,9 +19,12 @@ import io.github.drhydr0.layers.LayersApp
 import io.github.drhydr0.layers.R
 import io.github.drhydr0.layers.diagnostics.AppLog
 import io.github.drhydr0.layers.diagnostics.EditorStats
+import io.github.drhydr0.layers.document.Alignment
+import io.github.drhydr0.layers.document.Arrange
 import io.github.drhydr0.layers.document.CapturePlan
 import io.github.drhydr0.layers.document.CapturePlanner
 import io.github.drhydr0.layers.document.CaptureScope
+import io.github.drhydr0.layers.document.Distribution
 import io.github.drhydr0.layers.document.Document
 import io.github.drhydr0.layers.document.GroupLayer
 import io.github.drhydr0.layers.document.ImageAsset
@@ -30,6 +33,8 @@ import io.github.drhydr0.layers.document.Layer
 import io.github.drhydr0.layers.document.LayerId
 import io.github.drhydr0.layers.document.Placement
 import io.github.drhydr0.layers.document.Rect
+import io.github.drhydr0.layers.document.ShapeKind
+import io.github.drhydr0.layers.document.ShapeLayer
 import io.github.drhydr0.layers.document.Sticker
 import io.github.drhydr0.layers.document.Stickers
 import io.github.drhydr0.layers.document.TextLayer
@@ -42,10 +47,10 @@ import io.github.drhydr0.layers.history.MoveLayer
 import io.github.drhydr0.layers.history.PlacedLayer
 import io.github.drhydr0.layers.history.RemoveLayers
 import io.github.drhydr0.layers.history.ReplaceLayers
+import io.github.drhydr0.layers.history.TransformLayers
 import io.github.drhydr0.layers.history.UpdateLayer
 import io.github.drhydr0.layers.interaction.AreaSelectionTool
 import io.github.drhydr0.layers.interaction.CanvasTouchController
-import io.github.drhydr0.layers.interaction.HitTest
 import io.github.drhydr0.layers.persistence.SaveQueue
 import io.github.drhydr0.layers.persistence.format.ProjectManifest
 import io.github.drhydr0.layers.platform.GalleryWriter
@@ -56,6 +61,7 @@ import io.github.drhydr0.layers.render.DocumentView
 import io.github.drhydr0.layers.render.ExportOptions
 import io.github.drhydr0.layers.render.Exporter
 import io.github.drhydr0.layers.render.PreviewImages
+import io.github.drhydr0.layers.render.hitTestFor
 import io.github.drhydr0.layers.render.StickerThumbnails
 import io.github.drhydr0.layers.render.ThumbnailRenderer
 import java.io.File
@@ -96,13 +102,7 @@ class EditorActivity : Activity() {
         findViewById<View>(R.id.root).padForSystemBars()
         findViewById<ImageButton>(R.id.editor_back).setOnClickListener { finish() }
         canvasView = findViewById(R.id.editor_canvas)
-        findViewById<Button>(R.id.editor_add_image).setOnClickListener {
-            if (session != null) ImagePicker.launch(this, REQUEST_ADD_IMAGE)
-        }
-        findViewById<Button>(R.id.editor_add_text).setOnClickListener { addText() }
-        findViewById<Button>(R.id.editor_add_sticker).setOnClickListener {
-            if (session != null) StickerPicker(this, ::insertSticker).show()
-        }
+        findViewById<Button>(R.id.editor_add).setOnClickListener(::showAddMenu)
         undoButton = findViewById<ImageButton>(R.id.editor_undo).apply { setOnClickListener { session?.history?.undo() } }
         redoButton = findViewById<ImageButton>(R.id.editor_redo).apply { setOnClickListener { session?.history?.redo() } }
         saveStatus = findViewById<TextView>(R.id.editor_save_status).apply {
@@ -191,14 +191,7 @@ class EditorActivity : Activity() {
     // The controller calls performClick on taps; drags have no click equivalent.
     @android.annotation.SuppressLint("ClickableViewAccessibility")
     private fun setUpTouch() {
-        val hitTest = HitTest { doc, layer ->
-            when (layer) {
-                is ImageLayer -> doc.imageLocalBounds(layer)
-                is TextLayer -> canvasView.textLayouts.localBounds(layer)
-                // HitTest works out a group's box from its children.
-                is GroupLayer -> Rect(0.0, 0.0, 0.0, 0.0)
-            }
-        }
+        val hitTest = hitTestFor(canvasView.textLayouts)
         touch = CanvasTouchController(
             view = canvasView,
             hitTest = hitTest,
@@ -285,10 +278,15 @@ class EditorActivity : Activity() {
             menu.add(0, MENU_FIT, 0, R.string.editor_menu_fit)
             menu.add(0, MENU_HISTORY, 1, R.string.editor_menu_history)
             menu.add(0, MENU_AREA, 2, R.string.editor_menu_area)
+            menu.add(0, MENU_SNAPPING, 3, R.string.editor_menu_snapping).apply {
+                isCheckable = true
+                isChecked = touch.snappingEnabled
+            }
             setOnMenuItemClickListener {
                 when (it.itemId) {
                     MENU_FIT -> canvasView.fitToScreen()
                     MENU_HISTORY -> session?.history?.let { h -> HistorySheet.show(this@EditorActivity, h, h::jumpTo) }
+                    MENU_SNAPPING -> touch.snappingEnabled = !touch.snappingEnabled
                     MENU_AREA -> if (session != null) {
                         AreaSelectSheet.show(this@EditorActivity, touch.selectedIds.size, ::startArea)
                     }
@@ -324,7 +322,13 @@ class EditorActivity : Activity() {
             touch.select(scope)
         }
         editTextButton = findViewById(R.id.editor_edit_text)
-        editTextButton.setOnClickListener { selectedText()?.let(::editText) }
+        editTextButton.setOnClickListener {
+            when (val layer = selectedSingle()) {
+                is TextLayer -> editText(layer)
+                is ShapeLayer -> editShape(layer)
+                else -> Unit
+            }
+        }
         findViewById<Button>(R.id.editor_delete_selection).setOnClickListener {
             val current = session ?: return@setOnClickListener
             // Locked layers are protected from deletion along with the rest of the selection.
@@ -483,6 +487,13 @@ class EditorActivity : Activity() {
         PopupMenu(this, anchor).apply {
             menu.add(0, ACTION_DUPLICATE, 0, R.string.action_duplicate)
             menu.add(0, ACTION_GROUP, 1, R.string.action_group)
+            val align = menu.addSubMenu(0, 0, 2, R.string.action_align)
+            alignNames.forEach { (alignment, name) -> align.add(GROUP_ALIGN, alignment.ordinal, alignment.ordinal, name) }
+            if (selected.size >= 3) {
+                val spread = menu.addSubMenu(0, 0, 3, R.string.action_distribute)
+                spread.add(GROUP_DISTRIBUTE, Distribution.HORIZONTAL.ordinal, 0, R.string.distribute_horizontal)
+                spread.add(GROUP_DISTRIBUTE, Distribution.VERTICAL.ordinal, 1, R.string.distribute_vertical)
+            }
             menu.add(0, ACTION_MAKE_STICKER, 4, R.string.action_make_sticker)
             menu.add(0, ACTION_SAVE_STICKER, 5, R.string.action_save_sticker)
             if (singleGroup != null) {
@@ -490,6 +501,20 @@ class EditorActivity : Activity() {
                 menu.add(0, ACTION_EDIT_GROUP, 3, R.string.action_edit_group)
             }
             setOnMenuItemClickListener {
+                if (it.groupId == GROUP_ALIGN) {
+                    val alignment = Alignment.entries[it.itemId]
+                    arrange("Align") { boxes, canvas ->
+                        // One layer lines up with the canvas; several line up with each other.
+                        val frame = if (boxes.size == 1) canvas else boxes.values.reduce(Rect::union)
+                        Arrange.align(boxes, frame, alignment)
+                    }
+                    return@setOnMenuItemClickListener true
+                }
+                if (it.groupId == GROUP_DISTRIBUTE) {
+                    val direction = Distribution.entries[it.itemId]
+                    arrange("Space") { boxes, _ -> Arrange.distribute(boxes, direction) }
+                    return@setOnMenuItemClickListener true
+                }
                 when (it.itemId) {
                     ACTION_DUPLICATE -> duplicateSelection()
                     ACTION_GROUP -> groupSelection()
@@ -501,6 +526,29 @@ class EditorActivity : Activity() {
                 true
             }
         }.show()
+    }
+
+    private val alignNames = listOf(
+        Alignment.LEFT to R.string.align_left,
+        Alignment.CENTER_HORIZONTAL to R.string.align_center_horizontal,
+        Alignment.RIGHT to R.string.align_right,
+        Alignment.TOP to R.string.align_top,
+        Alignment.CENTER_VERTICAL to R.string.align_center_vertical,
+        Alignment.BOTTOM to R.string.align_bottom,
+    )
+
+    /** Moves the selected layers by the offsets [plan] works out, as one undo step. */
+    private fun arrange(verb: String, plan: (Map<LayerId, Rect>, canvas: Rect) -> Map<LayerId, Vec2>) {
+        val current = session ?: return
+        val doc = current.document
+        // Locked layers stay where they are, and stay out of the calculation.
+        val boxes = touch.selectionBoxes(doc).filterKeys { doc.layer(it)?.locked == false }
+        if (boxes.isEmpty()) return
+        val moved = plan(boxes, doc.canvas.bounds).mapNotNull { (id, offset) ->
+            val layer = doc.layer(id) ?: return@mapNotNull null
+            id to layer.transform.translatedBy(touch.canvasOffsetToScope(doc, offset))
+        }.toMap()
+        current.commit(TransformLayers.of(doc, moved, verb))
     }
 
     /** Independent copies, slightly offset, stacked above the originals and selected. */
@@ -625,12 +673,19 @@ class EditorActivity : Activity() {
         }
     }
 
-    /** The selected layer when it is a single text layer. */
-    private fun selectedText(): TextLayer? =
-        touch.selectedIds.singleOrNull()?.let { session?.document?.layer(it) } as? TextLayer
+    private fun selectedSingle(): Layer? = touch.selectedIds.singleOrNull()?.let { session?.document?.layer(it) }
 
     private fun refreshSelectionBar() {
-        editTextButton.visibility = if (selectedText() != null) View.VISIBLE else View.GONE
+        // One button for whatever the selected layer lets you edit.
+        val editable = selectedSingle()
+        editTextButton.visibility = if (editable is TextLayer || editable is ShapeLayer) View.VISIBLE else View.GONE
+        if (editable is ShapeLayer) {
+            editTextButton.setText(R.string.selection_edit_shape)
+            editTextButton.contentDescription = getString(R.string.selection_edit_shape_description)
+        } else {
+            editTextButton.setText(R.string.selection_edit_text)
+            editTextButton.contentDescription = getString(R.string.selection_edit_text_description)
+        }
         val count = touch.selectedIds.size
         selectionBar.visibility = if (count == 0) View.GONE else View.VISIBLE
         if (count > 0) selectionCount.text = resources.getQuantityString(R.plurals.selection_count, count, count)
@@ -770,6 +825,58 @@ class EditorActivity : Activity() {
     /** New content appears in the middle of what is on screen, not the middle of the canvas. */
     private fun placementFrame(doc: Document) = Placement.frame(doc.canvas, canvasView.visibleCanvasRect())
 
+    private fun showAddMenu(anchor: View) {
+        if (session == null) return
+        PopupMenu(this, anchor).apply {
+            menu.add(0, ADD_IMAGE, 0, R.string.add_image)
+            menu.add(0, ADD_TEXT, 1, R.string.add_text)
+            val shapes = menu.addSubMenu(0, 0, 2, R.string.add_shape)
+            shapeNames.forEach { (kind, name) -> shapes.add(1, kind.ordinal, kind.ordinal, name) }
+            menu.add(0, ADD_STICKER, 3, R.string.add_sticker)
+            setOnMenuItemClickListener {
+                when {
+                    it.groupId == 1 -> addShape(ShapeKind.entries[it.itemId])
+                    it.itemId == ADD_IMAGE -> ImagePicker.launch(this@EditorActivity, REQUEST_ADD_IMAGE)
+                    it.itemId == ADD_TEXT -> addText()
+                    it.itemId == ADD_STICKER -> StickerPicker(this@EditorActivity, ::insertSticker).show()
+                }
+                true
+            }
+        }.show()
+    }
+
+    private val shapeNames = listOf(
+        ShapeKind.RECTANGLE to R.string.shape_rectangle,
+        ShapeKind.ROUNDED_RECTANGLE to R.string.shape_rounded_rectangle,
+        ShapeKind.ELLIPSE to R.string.shape_ellipse,
+        ShapeKind.LINE to R.string.shape_line,
+        ShapeKind.ARROW to R.string.shape_arrow,
+    )
+
+    /** Adds a shape in the middle of the view, sized for it; Edit shape changes it afterwards. */
+    private fun addShape(kind: ShapeKind) {
+        val current = session ?: return
+        val doc = current.document
+        val name = getString(shapeNames.first { it.first == kind }.second)
+        val layer = Placement.defaultShape(LayerId.random(), name, kind, placementFrame(doc))
+        current.commit(AddLayers.onTop(doc, layer))
+        touch.enterScope(null)
+        touch.select(layer.id)
+        AppLog.i(TAG, "Added shape $kind")
+    }
+
+    private fun editShape(shape: ShapeLayer) {
+        val canvas = session?.document?.canvas ?: return
+        ShapeSheet.show(this, shape, maxOf(canvas.width, canvas.height).toDouble()) { edited ->
+            val current = session ?: return@show
+            // Keep any move made meanwhile: only the shape's own properties come from the sheet.
+            val latest = current.document.layer(shape.id) as? ShapeLayer ?: return@show
+            current.commit(
+                UpdateLayer.of(current.document, edited.copy(transform = latest.transform, name = latest.name), "Change shape"),
+            )
+        }
+    }
+
     private fun addText() {
         val canvas = session?.document?.canvas ?: return
         // Sized and placed for the view as it is when Text is tapped.
@@ -816,9 +923,15 @@ class EditorActivity : Activity() {
         private const val ACTION_SAVE_STICKER = 6
         private const val DUPLICATE_OFFSET_FRACTION = 0.04
         private const val BYTES_PER_PIXEL = 4
+        private const val ADD_IMAGE = 101
+        private const val ADD_TEXT = 102
+        private const val ADD_STICKER = 103
         private const val MENU_FIT = 1
         private const val MENU_HISTORY = 2
         private const val MENU_AREA = 3
+        private const val MENU_SNAPPING = 4
+        private const val GROUP_ALIGN = 10
+        private const val GROUP_DISTRIBUTE = 11
         private const val PREVIEW_MAX_SIDE = 1024
         private const val PNG_QUALITY = 100
         private const val PROGRESS_PADDING = 48

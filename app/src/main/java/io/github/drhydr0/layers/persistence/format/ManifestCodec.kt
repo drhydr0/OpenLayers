@@ -9,6 +9,8 @@ import io.github.drhydr0.layers.document.ImageAsset
 import io.github.drhydr0.layers.document.ImageLayer
 import io.github.drhydr0.layers.document.Layer
 import io.github.drhydr0.layers.document.LayerId
+import io.github.drhydr0.layers.document.ShapeKind
+import io.github.drhydr0.layers.document.ShapeLayer
 import io.github.drhydr0.layers.document.TextAlignment
 import io.github.drhydr0.layers.document.TextLayer
 import io.github.drhydr0.layers.document.TextStyle
@@ -51,7 +53,7 @@ class ManifestException(message: String, cause: Throwable? = null) : Exception(m
 /** Converts [ProjectManifest] to and from the versioned JSON file format. */
 object ManifestCodec {
 
-    const val CURRENT_VERSION = 3
+    const val CURRENT_VERSION = 4
 
     /**
      * Upgrades from version N to N+1, keyed by N. A format change bumps [CURRENT_VERSION]
@@ -62,6 +64,8 @@ object ManifestCodec {
         1 to { obj -> JsonObject(obj + ("formatVersion" to JsonPrimitive(2))) },
         // 2 -> 3 added groups and parent ids; older files simply have none.
         2 to { obj -> JsonObject(obj + ("formatVersion" to JsonPrimitive(3))) },
+        // 3 -> 4 added shape layers; older files simply have none.
+        3 to { obj -> JsonObject(obj + ("formatVersion" to JsonPrimitive(4))) },
     )
 
     internal val json = Json {
@@ -184,6 +188,16 @@ object ManifestCodec {
             is GroupLayer -> GroupLayerDto(
                 layer.id.value, layer.name, t, layer.opacity, layer.visible, layer.locked, layer.children.map(::layerToDto),
             )
+            is ShapeLayer -> ShapeLayerDto(
+                layer.id.value, layer.name, t, layer.opacity, layer.visible, layer.locked,
+                kind = layer.kind.name.lowercase(),
+                width = layer.width,
+                height = layer.height,
+                fill = colorToHex(layer.fill),
+                stroke = colorToHex(layer.stroke),
+                strokeWidth = layer.strokeWidth,
+                cornerRadius = layer.cornerRadius,
+            )
             is TextLayer -> TextLayerDto(
                 layer.id.value, layer.name, t, layer.opacity, layer.visible, layer.locked,
                 text = layer.text,
@@ -203,6 +217,13 @@ object ManifestCodec {
             )
             is GroupLayerDto -> GroupLayer(
                 LayerId(dto.id), dto.name, dto.children.map(::layerFromDto), t, dto.opacity, dto.visible, dto.locked,
+            )
+            is ShapeLayerDto -> ShapeLayer(
+                LayerId(dto.id), dto.name,
+                ShapeKind.entries.firstOrNull { it.name.equals(dto.kind, ignoreCase = true) }
+                    ?: throw IllegalArgumentException("unknown shape '${dto.kind}'"),
+                dto.width, dto.height, colorFromHex(dto.fill), colorFromHex(dto.stroke), dto.strokeWidth, dto.cornerRadius,
+                t, dto.opacity, dto.visible, dto.locked,
             )
             is TextLayerDto -> TextLayer(
                 LayerId(dto.id), dto.name, dto.text,

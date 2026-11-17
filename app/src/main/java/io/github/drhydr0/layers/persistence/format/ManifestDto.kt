@@ -134,6 +134,26 @@ internal data class ImageLayerDto(
     val assetId: String,
 ) : LayerDto
 
+/** Since format 4. */
+@Serializable
+@SerialName("shape")
+internal data class ShapeLayerDto(
+    override val id: String,
+    override val name: String,
+    override val transform: TransformDto,
+    override val opacity: Double = 1.0,
+    override val visible: Boolean = true,
+    override val locked: Boolean = false,
+    /** "rectangle", "rounded_rectangle", "ellipse", "line", or "arrow". */
+    val kind: String,
+    val width: Double,
+    val height: Double,
+    val fill: String = "#00000000",
+    val stroke: String = "#FF000000",
+    val strokeWidth: Double = 0.0,
+    val cornerRadius: Double = 0.0,
+) : LayerDto
+
 /** Since format 3. */
 @Serializable
 @SerialName("group")

@@ -8,6 +8,7 @@ import io.github.drhydr0.layers.document.Document
 import io.github.drhydr0.layers.document.GroupLayer
 import io.github.drhydr0.layers.document.ImageLayer
 import io.github.drhydr0.layers.document.Layer
+import io.github.drhydr0.layers.document.ShapeLayer
 import io.github.drhydr0.layers.document.TextLayer
 import kotlin.math.roundToInt
 
@@ -52,6 +53,7 @@ class DocumentRenderer(private val textLayouts: TextLayouts) {
             is ImageLayer -> drawImage(target, document, layer, images, alpha)
             is TextLayer -> drawText(target, layer, alpha)
             is GroupLayer -> drawGroup(target, document, layer, images, alpha)
+            is ShapeLayer -> ShapeDrawing.draw(target, layer, alpha)
         }
         target.restoreToCount(save)
     }
