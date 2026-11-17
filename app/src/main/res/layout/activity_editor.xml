@@ -62,6 +62,14 @@
             android:contentDescription="@string/editor_redo"
             android:enabled="false"
             android:src="@drawable/ic_redo" />
+
+        <ImageButton
+            android:id="@+id/editor_export"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/editor_export"
+            android:src="@drawable/ic_export" />
     </LinearLayout>
 
     <io.github.drhydr0.layers.render.DocumentView
