@@ -51,6 +51,9 @@ jobs:
       - name: Unit tests, lint, debug APK
         run: ./gradlew testDebugUnitTest lintDebug assembleDebug --console=plain
 
+      - name: Check 64-bit-only device support
+        run: scripts/check-apk-abis.sh app/build/outputs/apk/debug/app-debug.apk
+
       - name: Upload debug APK
         uses: actions/upload-artifact@v5
         with:

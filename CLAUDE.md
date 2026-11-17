@@ -25,7 +25,7 @@ Run from the repository root with the Gradle wrapper. Never use a system `gradle
 | Unit tests (JVM) | `./gradlew testDebugUnitTest` |
 | Lint | `./gradlew lintDebug` |
 | Debug APK | `./gradlew assembleDebug` |
-| Full pre-push check | `./gradlew testDebugUnitTest lintDebug assembleDebug` |
+| Full pre-push check | `./gradlew testDebugUnitTest lintDebug assembleDebug && scripts/check-apk-abis.sh app/build/outputs/apk/debug/app-debug.apk` |
 | Single test class | `./gradlew testDebugUnitTest --tests "<fully.qualified.ClassName>"` |
 
 Before pushing, run the full pre-push check and make sure it passes. If a clean build exceeds the foreground command limit, run it in the background and check on it. Don't skip it.
@@ -38,6 +38,7 @@ If the Android SDK is missing (`sdkmanager` or `ANDROID_HOME` not found), the cl
 - Standard Android Views for UI controls. A custom `View` draws the document canvas. No Jetpack Compose unless the developer decides otherwise.
 - Every version is pinned in `gradle/libs.versions.toml`: Android Gradle Plugin, Kotlin, SDK levels, and libraries. Never use dynamic versions (`+`, `latest.release`).
 - Keep dependencies minimal. Before adding a library, explain why in the PR description and confirm that the platform can't do the job reasonably.
+- The app must run on 64-bit-only phones (Pixel 7 and later, Samsung S26, and similar). Prefer libraries without native code. Any native library must ship an `arm64-v8a` build. CI enforces this with `scripts/check-apk-abis.sh`.
 
 ## Architecture boundaries
 
