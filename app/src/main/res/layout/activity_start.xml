@@ -31,4 +31,14 @@
         android:fontFamily="monospace"
         android:textAppearance="?android:attr/textAppearanceMedium"
         android:textIsSelectable="true" />
+
+    <Button
+        android:id="@+id/open_diagnostics"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="32dp"
+        android:contentDescription="@string/start_open_diagnostics_description"
+        android:minHeight="48dp"
+        android:minWidth="48dp"
+        android:text="@string/start_open_diagnostics" />
 </LinearLayout>
