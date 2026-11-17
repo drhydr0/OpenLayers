@@ -65,6 +65,14 @@ class CanvasTouchController(
             field = value
         }
 
+    /** While set, touches draw and adjust an area selection instead of editing layers. */
+    var areaTool: AreaSelectionTool? = null
+        set(value) {
+            if (value != null && field == null) cancel()
+            field = value
+            view.invalidate()
+        }
+
     private val navigation = NavigationGestures(view)
     private val density = view.resources.displayMetrics.density
     private val touchSlop = ViewConfiguration.get(view.context).scaledTouchSlop
@@ -148,6 +156,10 @@ class CanvasTouchController(
         val doc = document() ?: return false
         if (navigationMode) {
             navigation.onTouch(event)
+            return true
+        }
+        areaTool?.let {
+            it.onTouch(event)
             return true
         }
         when (event.actionMasked) {

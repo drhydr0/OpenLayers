@@ -202,5 +202,43 @@
     <string name="sticker_delete_message">It will be removed from your collection. Stickers already placed in projects are not affected.</string>
     <string name="selection_edit_text">Edit text</string>
     <string name="selection_edit_text_description">Change the words, size, color, or alignment of the selected text</string>
+    <string name="editor_menu_area">Select area…</string>
+    <string name="area_title">Select an area</string>
+    <string name="area_shape_label">Shape</string>
+    <string name="area_shape_rect">Rectangle</string>
+    <string name="area_shape_lasso">Lasso</string>
+    <string name="area_scope_label">Copy from</string>
+    <string name="area_scope_canvas">Everything visible</string>
+    <string name="area_scope_active">The selected layer only</string>
+    <string name="area_scope_active_unavailable">One layer only (select exactly one layer first)</string>
+    <string name="area_scope_selected">The selected layers only</string>
+    <string name="area_scope_selected_unavailable">Several layers only (select two or more first)</string>
+    <plurals name="area_scope_selected_count">
+        <item quantity="one">The %d selected layer only</item>
+        <item quantity="other">The %d selected layers only</item>
+    </plurals>
+    <string name="area_include_background">Include the canvas background</string>
+    <string name="area_start">Start</string>
+    <string name="area_hint_rect">Drag to draw a rectangle</string>
+    <string name="area_hint_lasso">Draw around an area</string>
+    <!-- %1$s = shape name, %2$s = what is copied -->
+    <string name="area_status">%1$s · %2$s · drag inside to move</string>
+    <string name="area_status_canvas">everything visible</string>
+    <string name="area_status_active">selected layer</string>
+    <string name="area_status_selected">selected layers</string>
+    <string name="area_copy">Copy as sticker</string>
+    <string name="area_copy_description">Copy the selected area as an image sticker</string>
+    <string name="area_cancel">Cancel</string>
+    <string name="area_cancel_description">Stop selecting an area</string>
+    <string name="area_empty">Draw an area first.</string>
+    <string name="capture_nothing">Nothing to copy there. The area is empty for what you chose to copy from.</string>
+    <string name="capture_failed">Could not copy that area.</string>
+    <string name="capture_title">Create image sticker</string>
+    <!-- %1$d x %2$d = pixels -->
+    <string name="capture_summary">This makes a flattened picture (%1$d × %2$d px) with a transparent surround. Text and layers in it can no longer be edited separately; the originals stay as they are.</string>
+    <string name="capture_summary_reduced">This makes a flattened picture (%1$d × %2$d px, reduced to fit this phone\'s memory) with a transparent surround. The originals stay as they are.</string>
+    <string name="capture_preview_description">Preview of the image sticker</string>
+    <string name="capture_create">Create</string>
+    <string name="default_image_sticker_name">Image sticker</string>
     <string name="editor_open_failed">Could not open the project.</string>
 </resources>

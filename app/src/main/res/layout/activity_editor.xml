@@ -87,6 +87,47 @@
             android:src="@drawable/ic_more_vert" />
     </LinearLayout>
 
+    <!-- Shown while selecting an area: says what is being drawn and copied, with the actions. -->
+    <LinearLayout
+        xmlns:tools="http://schemas.android.com/tools"
+        android:id="@+id/editor_area_bar"
+        tools:ignore="ButtonOrder"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@color/layer_row_selected"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="16dp"
+        android:paddingEnd="4dp"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/editor_area_status"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:accessibilityLiveRegion="polite"
+            android:textAppearance="?android:attr/textAppearanceSmall" />
+
+        <Button
+            android:id="@+id/editor_area_cancel"
+            style="?android:attr/borderlessButtonStyle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:contentDescription="@string/area_cancel_description"
+            android:minHeight="48dp"
+            android:text="@string/area_cancel" />
+
+        <Button
+            android:id="@+id/editor_area_copy"
+            style="?android:attr/borderlessButtonStyle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:contentDescription="@string/area_copy_description"
+            android:minHeight="48dp"
+            android:text="@string/area_copy" />
+    </LinearLayout>
+
     <!-- Shown while editing inside a group: names it and offers the way out. -->
     <LinearLayout
         android:id="@+id/editor_scope_bar"

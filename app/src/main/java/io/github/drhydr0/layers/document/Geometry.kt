@@ -25,6 +25,12 @@ data class Rect(val left: Double, val top: Double, val right: Double, val bottom
 
     fun contains(point: Vec2) = point.x in left..right && point.y in top..bottom
 
+    /** The overlap with [other], or null when they don't overlap. */
+    fun intersect(other: Rect): Rect? {
+        val r = Rect(max(left, other.left), max(top, other.top), min(right, other.right), min(bottom, other.bottom))
+        return if (r.isEmpty) null else r
+    }
+
     fun union(other: Rect) = Rect(
         min(left, other.left), min(top, other.top),
         max(right, other.right), max(bottom, other.bottom),
