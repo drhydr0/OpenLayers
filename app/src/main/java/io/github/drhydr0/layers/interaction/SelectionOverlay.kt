@@ -5,6 +5,7 @@ import android.graphics.DashPathEffect
 import android.graphics.Paint
 import android.graphics.Path
 import io.github.drhydr0.layers.R
+import io.github.drhydr0.layers.document.Arrange
 import io.github.drhydr0.layers.document.Document
 import io.github.drhydr0.layers.document.Layer
 import io.github.drhydr0.layers.document.LayerId
@@ -42,6 +43,10 @@ class SelectionOverlay(
     private val scopePaint = Paint(memberPaint).apply {
         pathEffect = DashPathEffect(floatArrayOf(6 * density, 4 * density), 0f)
     }
+    private val guidePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        strokeWidth = density
+        color = view.context.getColor(R.color.snap_guide)
+    }
     private val handleFill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFFFFFFF.toInt() }
     private val handleStroke = Paint(outlinePaint)
     private val path = Path()
@@ -73,7 +78,24 @@ class SelectionOverlay(
             .minWithOrNull(compareBy<Pair<Handle, Double>> { it.second }.thenBy { it.first == Handle.CORNER })
             ?.first
 
+    /** Guide lines to show while a drag is snapped; null when not snapping. */
+    var guides: Arrange.Snap? = null
+
+    private fun drawGuides(canvas: Canvas) {
+        val snap = guides ?: return
+        // Guides are canvas positions; draw them across the whole view.
+        snap.verticalGuides.forEach { x ->
+            val sx = view.viewMatrix.map(Vec2(x, 0.0)).x.toFloat()
+            canvas.drawLine(sx, 0f, sx, view.height.toFloat(), guidePaint)
+        }
+        snap.horizontalGuides.forEach { y ->
+            val sy = view.viewMatrix.map(Vec2(0.0, y)).y.toFloat()
+            canvas.drawLine(0f, sy, view.width.toFloat(), sy, guidePaint)
+        }
+    }
+
     fun draw(canvas: Canvas, doc: Document) {
+        drawGuides(canvas)
         // A dashed frame marks the group being edited.
         scopeId()?.let(doc::layer)?.let { outline(canvas, hitTest.corners(doc, it).map(view.viewMatrix::map), scopePaint) }
         val selected = selectedIds().mapNotNull(doc::layer)

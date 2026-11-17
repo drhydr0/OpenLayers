@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewConfiguration
+import io.github.drhydr0.layers.document.Arrange
 import io.github.drhydr0.layers.document.Document
 import io.github.drhydr0.layers.document.GroupLayer
 import io.github.drhydr0.layers.document.Layer
@@ -53,6 +54,9 @@ class CanvasTouchController(
         private set
 
     val overlay = SelectionOverlay(view, hitTest, { selectedIds }, { scopeId })
+
+    /** While on, a dragged layer snaps to the canvas and to other layers. */
+    var snappingEnabled = true
 
     /** While on, taps add layers to or remove them from the selection. */
     var multiSelectMode = false
@@ -242,10 +246,13 @@ class CanvasTouchController(
         val (from, to) = fingers[0]
         val single = targetIds.size == 1
         when (mode) {
-            Mode.MOVE -> currentTransforms = baseTransforms.mapValues { (_, base) ->
-                // The same finger motion applied to every layer moves them as one rigid group.
-                if (fingers.size >= 2) GestureMath.pinch(base, from, fingers[1].first, to, fingers[1].second)
-                else GestureMath.drag(base, from, to)
+            Mode.MOVE -> {
+                currentTransforms = baseTransforms.mapValues { (_, base) ->
+                    // The same finger motion applied to every layer moves them as one rigid group.
+                    if (fingers.size >= 2) GestureMath.pinch(base, from, fingers[1].first, to, fingers[1].second)
+                    else GestureMath.drag(base, from, to)
+                }
+                if (fingers.size == 1) snapMove(doc) else overlay.guides = null
             }
             Mode.CORNER -> {
                 val factor = GestureMath.groupFactor(baseTransforms.values, groupPivot, from, to)
@@ -303,7 +310,35 @@ class CanvasTouchController(
         reset()
     }
 
+    /**
+     * Pulls a one-finger drag onto nearby guides: the canvas edges and center, and other
+     * layers' edges and centers. Top level only, where layer and canvas coordinates agree.
+     */
+    private fun snapMove(doc: Document) {
+        overlay.guides = null
+        if (!snappingEnabled || scopeId != null) return
+        val moving = preview(doc)
+        val box = Rect.bounding(targetIds.mapNotNull(moving::layer).flatMap { hitTest.corners(moving, it) })
+        val others = doc.layers.filter { it.visible && it.id !in targetIds }
+            .map { Rect.bounding(hitTest.corners(doc, it)) }
+        val snap = Arrange.snap(box, others + doc.canvas.bounds, grabSlop() * SNAP_FRACTION)
+        if (snap.offset == Vec2.ZERO) return
+        currentTransforms = currentTransforms.mapValues { it.value.translatedBy(snap.offset) }
+        overlay.guides = snap
+    }
+
+    /** Upright bounding boxes of the selected layers, in canvas coordinates. */
+    fun selectionBoxes(doc: Document): Map<LayerId, Rect> =
+        selectedIds.mapNotNull(doc::layer).associate { it.id to Rect.bounding(hitTest.corners(doc, it)) }
+
+    /** Converts a move given in canvas pixels into the coordinates of the group being edited. */
+    fun canvasOffsetToScope(doc: Document, offset: Vec2): Vec2 {
+        val inverse = doc.matrixOf(scopeId).inverted() ?: return offset
+        return inverse.map(offset) - inverse.map(Vec2.ZERO)
+    }
+
     private fun reset() {
+        overlay.guides = null
         mode = Mode.NONE
         startDoc = null
         targetIds = emptyList()
@@ -352,6 +387,8 @@ class CanvasTouchController(
 
     private companion object {
         const val GRAB_SLOP_DP = 12
+        // Snap within 8 dp on screen: close enough to mean it, far enough to drag past.
+        const val SNAP_FRACTION = 8.0 / GRAB_SLOP_DP
         const val MIN_TEXT_WIDTH = 16.0
     }
 }

@@ -260,5 +260,16 @@
     <!-- %1$d = a size in canvas pixels -->
     <string name="pixels_value">%1$d px</string>
     <string name="layers_kind_shape">Shape</string>
+    <string name="action_align">Align</string>
+    <string name="action_distribute">Space evenly</string>
+    <string name="align_left">Left</string>
+    <string name="align_center_horizontal">Center (left to right)</string>
+    <string name="align_right">Right</string>
+    <string name="align_top">Top</string>
+    <string name="align_center_vertical">Middle (top to bottom)</string>
+    <string name="align_bottom">Bottom</string>
+    <string name="distribute_horizontal">Across (left to right)</string>
+    <string name="distribute_vertical">Down (top to bottom)</string>
+    <string name="editor_menu_snapping">Snap while dragging</string>
     <string name="editor_open_failed">Could not open the project.</string>
 </resources>

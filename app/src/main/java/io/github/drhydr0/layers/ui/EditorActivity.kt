@@ -19,9 +19,12 @@ import io.github.drhydr0.layers.LayersApp
 import io.github.drhydr0.layers.R
 import io.github.drhydr0.layers.diagnostics.AppLog
 import io.github.drhydr0.layers.diagnostics.EditorStats
+import io.github.drhydr0.layers.document.Alignment
+import io.github.drhydr0.layers.document.Arrange
 import io.github.drhydr0.layers.document.CapturePlan
 import io.github.drhydr0.layers.document.CapturePlanner
 import io.github.drhydr0.layers.document.CaptureScope
+import io.github.drhydr0.layers.document.Distribution
 import io.github.drhydr0.layers.document.Document
 import io.github.drhydr0.layers.document.GroupLayer
 import io.github.drhydr0.layers.document.ImageAsset
@@ -44,6 +47,7 @@ import io.github.drhydr0.layers.history.MoveLayer
 import io.github.drhydr0.layers.history.PlacedLayer
 import io.github.drhydr0.layers.history.RemoveLayers
 import io.github.drhydr0.layers.history.ReplaceLayers
+import io.github.drhydr0.layers.history.TransformLayers
 import io.github.drhydr0.layers.history.UpdateLayer
 import io.github.drhydr0.layers.interaction.AreaSelectionTool
 import io.github.drhydr0.layers.interaction.CanvasTouchController
@@ -274,10 +278,15 @@ class EditorActivity : Activity() {
             menu.add(0, MENU_FIT, 0, R.string.editor_menu_fit)
             menu.add(0, MENU_HISTORY, 1, R.string.editor_menu_history)
             menu.add(0, MENU_AREA, 2, R.string.editor_menu_area)
+            menu.add(0, MENU_SNAPPING, 3, R.string.editor_menu_snapping).apply {
+                isCheckable = true
+                isChecked = touch.snappingEnabled
+            }
             setOnMenuItemClickListener {
                 when (it.itemId) {
                     MENU_FIT -> canvasView.fitToScreen()
                     MENU_HISTORY -> session?.history?.let { h -> HistorySheet.show(this@EditorActivity, h, h::jumpTo) }
+                    MENU_SNAPPING -> touch.snappingEnabled = !touch.snappingEnabled
                     MENU_AREA -> if (session != null) {
                         AreaSelectSheet.show(this@EditorActivity, touch.selectedIds.size, ::startArea)
                     }
@@ -478,6 +487,13 @@ class EditorActivity : Activity() {
         PopupMenu(this, anchor).apply {
             menu.add(0, ACTION_DUPLICATE, 0, R.string.action_duplicate)
             menu.add(0, ACTION_GROUP, 1, R.string.action_group)
+            val align = menu.addSubMenu(0, 0, 2, R.string.action_align)
+            alignNames.forEach { (alignment, name) -> align.add(GROUP_ALIGN, alignment.ordinal, alignment.ordinal, name) }
+            if (selected.size >= 3) {
+                val spread = menu.addSubMenu(0, 0, 3, R.string.action_distribute)
+                spread.add(GROUP_DISTRIBUTE, Distribution.HORIZONTAL.ordinal, 0, R.string.distribute_horizontal)
+                spread.add(GROUP_DISTRIBUTE, Distribution.VERTICAL.ordinal, 1, R.string.distribute_vertical)
+            }
             menu.add(0, ACTION_MAKE_STICKER, 4, R.string.action_make_sticker)
             menu.add(0, ACTION_SAVE_STICKER, 5, R.string.action_save_sticker)
             if (singleGroup != null) {
@@ -485,6 +501,20 @@ class EditorActivity : Activity() {
                 menu.add(0, ACTION_EDIT_GROUP, 3, R.string.action_edit_group)
             }
             setOnMenuItemClickListener {
+                if (it.groupId == GROUP_ALIGN) {
+                    val alignment = Alignment.entries[it.itemId]
+                    arrange("Align") { boxes, canvas ->
+                        // One layer lines up with the canvas; several line up with each other.
+                        val frame = if (boxes.size == 1) canvas else boxes.values.reduce(Rect::union)
+                        Arrange.align(boxes, frame, alignment)
+                    }
+                    return@setOnMenuItemClickListener true
+                }
+                if (it.groupId == GROUP_DISTRIBUTE) {
+                    val direction = Distribution.entries[it.itemId]
+                    arrange("Space") { boxes, _ -> Arrange.distribute(boxes, direction) }
+                    return@setOnMenuItemClickListener true
+                }
                 when (it.itemId) {
                     ACTION_DUPLICATE -> duplicateSelection()
                     ACTION_GROUP -> groupSelection()
@@ -496,6 +526,29 @@ class EditorActivity : Activity() {
                 true
             }
         }.show()
+    }
+
+    private val alignNames = listOf(
+        Alignment.LEFT to R.string.align_left,
+        Alignment.CENTER_HORIZONTAL to R.string.align_center_horizontal,
+        Alignment.RIGHT to R.string.align_right,
+        Alignment.TOP to R.string.align_top,
+        Alignment.CENTER_VERTICAL to R.string.align_center_vertical,
+        Alignment.BOTTOM to R.string.align_bottom,
+    )
+
+    /** Moves the selected layers by the offsets [plan] works out, as one undo step. */
+    private fun arrange(verb: String, plan: (Map<LayerId, Rect>, canvas: Rect) -> Map<LayerId, Vec2>) {
+        val current = session ?: return
+        val doc = current.document
+        // Locked layers stay where they are, and stay out of the calculation.
+        val boxes = touch.selectionBoxes(doc).filterKeys { doc.layer(it)?.locked == false }
+        if (boxes.isEmpty()) return
+        val moved = plan(boxes, doc.canvas.bounds).mapNotNull { (id, offset) ->
+            val layer = doc.layer(id) ?: return@mapNotNull null
+            id to layer.transform.translatedBy(touch.canvasOffsetToScope(doc, offset))
+        }.toMap()
+        current.commit(TransformLayers.of(doc, moved, verb))
     }
 
     /** Independent copies, slightly offset, stacked above the originals and selected. */
@@ -876,6 +929,9 @@ class EditorActivity : Activity() {
         private const val MENU_FIT = 1
         private const val MENU_HISTORY = 2
         private const val MENU_AREA = 3
+        private const val MENU_SNAPPING = 4
+        private const val GROUP_ALIGN = 10
+        private const val GROUP_DISTRIBUTE = 11
         private const val PREVIEW_MAX_SIDE = 1024
         private const val PNG_QUALITY = 100
         private const val PROGRESS_PADDING = 48
