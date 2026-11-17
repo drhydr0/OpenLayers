@@ -10,18 +10,29 @@
         android:theme="@style/Theme.Layers">
 
         <activity
+            android:name=".ui.ProjectsActivity"
+            android:exported="false" />
+
+        <!-- Keeps the original launcher component name, so home-screen icons survive the rename. -->
+        <activity-alias
             android:name=".ui.StartActivity"
-            android:exported="true">
+            android:exported="true"
+            android:targetActivity=".ui.ProjectsActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-        </activity>
+        </activity-alias>
+
+        <activity
+            android:name=".ui.EditorActivity"
+            android:exported="false"
+            android:parentActivityName=".ui.ProjectsActivity" />
 
         <activity
             android:name=".ui.DiagnosticsActivity"
             android:exported="false"
             android:label="@string/diagnostics_title"
-            android:parentActivityName=".ui.StartActivity" />
+            android:parentActivityName=".ui.ProjectsActivity" />
     </application>
 </manifest>

@@ -1,9 +1,7 @@
 <resources>
     <string name="app_name">Layers</string>
-    <!-- %1$s = version name, %2$d = version code -->
-    <string name="start_version">Version %1$s (%2$d)</string>
-    <!-- %1$s = short git commit hash -->
-    <string name="start_commit">Commit %1$s</string>
+    <!-- %1$s = version name, %2$d = version code, %3$s = short git commit hash -->
+    <string name="projects_build_info">%1$s (%2$d) · %3$s</string>
     <string name="start_open_diagnostics">Diagnostics</string>
     <string name="start_open_diagnostics_description">Open diagnostics screen</string>
 
@@ -23,4 +21,51 @@
     <string name="diagnostics_share_description">Share diagnostics report</string>
     <string name="diagnostics_test_crash">Test crash</string>
     <string name="diagnostics_test_crash_description">Crash the app on purpose to test crash reports</string>
+
+    <string name="projects_new">New project</string>
+    <string name="projects_new_description">Create a new project</string>
+    <string name="projects_empty">No projects yet. Tap New project to start.</string>
+    <plurals name="projects_damaged">
+        <item quantity="one">%d project could not be read. Share diagnostics to help fix it.</item>
+        <item quantity="other">%d projects could not be read. Share diagnostics to help fix them.</item>
+    </plurals>
+    <!-- %1$s = relative time, e.g. "5 minutes ago" -->
+    <string name="projects_edited">Edited %1$s</string>
+    <string name="projects_open_description">Open %1$s</string>
+    <string name="projects_more_generic">More options</string>
+    <string name="projects_more_description">More options for %1$s</string>
+    <string name="projects_rename">Rename</string>
+    <string name="projects_rename_title">Rename project</string>
+    <string name="projects_rename_field_description">Project name</string>
+    <string name="projects_rename_confirm">Rename</string>
+    <string name="projects_rename_failed">Could not rename the project.</string>
+    <string name="projects_delete">Delete</string>
+    <string name="projects_delete_title">Delete %1$s?</string>
+    <string name="projects_delete_message">The project and its images will be removed from this phone. This cannot be undone.</string>
+    <string name="projects_delete_confirm">Delete</string>
+    <string name="projects_delete_failed">Could not delete the project.</string>
+    <string name="projects_create_failed">Could not create the project.</string>
+
+    <string name="new_project_title">New project</string>
+    <string name="new_project_create">Create</string>
+    <string name="new_project_name_hint">Name</string>
+    <string name="new_project_default_name">Untitled</string>
+    <string name="new_project_size_label">Canvas size</string>
+    <string name="size_square">Square · 1080 × 1080</string>
+    <string name="size_portrait">Portrait · 1080 × 1350</string>
+    <string name="size_story">Story · 1080 × 1920</string>
+    <string name="size_landscape">Landscape · 1920 × 1080</string>
+    <string name="size_custom">Custom size</string>
+    <string name="new_project_width_hint">Width (px)</string>
+    <string name="new_project_height_hint">Height (px)</string>
+    <string name="new_project_size_error">Use whole numbers from %1$d to %2$d</string>
+    <string name="new_project_background_label">Background</string>
+    <string name="background_white">White</string>
+    <string name="background_black">Black</string>
+    <string name="background_transparent">Transparent</string>
+
+    <string name="editor_back_description">Back to projects</string>
+    <!-- %1$d = width, %2$d = height in pixels -->
+    <string name="editor_canvas_size">Canvas %1$d × %2$d px\n\nCanvas editing arrives in the next update.</string>
+    <string name="editor_open_failed">Could not open the project.</string>
 </resources>
