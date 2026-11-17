@@ -6,6 +6,7 @@ import io.github.drhydr0.layers.document.Grouping
 import io.github.drhydr0.layers.document.ImageAsset
 import io.github.drhydr0.layers.document.Layer
 import io.github.drhydr0.layers.document.LayerId
+import io.github.drhydr0.layers.document.Stickers
 import io.github.drhydr0.layers.document.TextLayer
 import io.github.drhydr0.layers.document.Transform
 import io.github.drhydr0.layers.document.Vec2
@@ -53,7 +54,13 @@ data class AddLayers(
         requireAscending(placements)
     }
 
-    override val label get() = if (placements.size == 1) "$verb layer" else "$verb ${placements.size} layers"
+    override val label
+        get() = when {
+            // Sticker actions read better without a layer count.
+            verb.endsWith("sticker") -> verb
+            placements.size == 1 -> "$verb layer"
+            else -> "$verb ${placements.size} layers"
+        }
 
     override fun apply(document: Document): Document {
         // Assets stay after undo: they are immutable, and redo or history may need them again.
@@ -69,6 +76,37 @@ data class AddLayers(
             listOf(PlacedLayer(document.children(parentId).size, layer, parentId)),
             listOfNotNull(asset),
         )
+
+        /**
+         * An editable sticker: an independent copy of the given sibling layers as one object,
+         * stacked directly above the topmost original and shifted by [offset]. The originals
+         * stay in place. [center] is the selection's center in the siblings' coordinates.
+         */
+        fun sticker(
+            document: Document,
+            ids: Collection<LayerId>,
+            center: Vec2,
+            offset: Vec2,
+            name: String,
+            newId: () -> LayerId,
+        ): AddLayers {
+            val originals = placementsOf(document, ids)
+            require(originals.isNotEmpty()) { "nothing to make a sticker from" }
+            val parent = originals.first().parentId
+            require(originals.all { it.parentId == parent }) { "sticker layers must share a parent" }
+            val content = Stickers.contentOf(originals.map { it.layer }, center, name, newId)
+            // A single layer keeps its own center; a group sits on the selection's center.
+            val origin = originals.singleOrNull()?.layer?.transform?.position ?: center
+            val placed = content.withName(name).withTransform(content.transform.translatedBy(origin + offset))
+            return AddLayers(listOf(PlacedLayer(originals.last().index + 1, placed, parent)), verb = CREATE_STICKER)
+        }
+
+        /** Inserts a saved sticker's new instance on top of the top level. */
+        fun insertSticker(document: Document, instance: Layer, assets: List<ImageAsset>) =
+            AddLayers(listOf(PlacedLayer(document.layers.size, instance)), assets, INSERT_STICKER)
+
+        const val CREATE_STICKER = "Create sticker"
+        const val INSERT_STICKER = "Insert sticker"
 
         /**
          * Independent copies of the given sibling layers, stacked directly above the topmost

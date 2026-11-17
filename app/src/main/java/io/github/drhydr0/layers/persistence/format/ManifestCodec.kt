@@ -64,7 +64,7 @@ object ManifestCodec {
         2 to { obj -> JsonObject(obj + ("formatVersion" to JsonPrimitive(3))) },
     )
 
-    private val json = Json {
+    internal val json = Json {
         classDiscriminator = "type"
         encodeDefaults = true
         // Tolerates fields added by a future minor change instead of refusing to open.
@@ -166,8 +166,8 @@ object ManifestCodec {
 
     private fun placedToDto(p: PlacedLayer) = PlacedLayerDto(p.index, layerToDto(p.layer), p.parentId?.value)
     private fun placedFromDto(p: PlacedLayerDto) = PlacedLayer(p.index, layerFromDto(p.layer), p.parentId?.let(::LayerId))
-    private fun assetToDto(a: ImageAsset) = AssetDto(a.id.sha256, a.mimeType, a.width, a.height)
-    private fun assetFromDto(a: AssetDto) = ImageAsset(AssetId(a.id), a.mimeType, a.width, a.height)
+    internal fun assetToDto(a: ImageAsset) = AssetDto(a.id.sha256, a.mimeType, a.width, a.height)
+    internal fun assetFromDto(a: AssetDto) = ImageAsset(AssetId(a.id), a.mimeType, a.width, a.height)
 
     private fun transformToDto(t: Transform) =
         TransformDto(t.position.x, t.position.y, t.scaleX, t.scaleY, t.rotationDegrees, t.flipX, t.flipY)
@@ -175,7 +175,7 @@ object ManifestCodec {
     private fun transformFromDto(t: TransformDto) =
         Transform(Vec2(t.x, t.y), t.scaleX, t.scaleY, t.rotationDegrees, t.flipX, t.flipY)
 
-    private fun layerToDto(layer: Layer): LayerDto {
+    internal fun layerToDto(layer: Layer): LayerDto {
         val t = transformToDto(layer.transform)
         return when (layer) {
             is ImageLayer -> ImageLayerDto(
@@ -195,7 +195,7 @@ object ManifestCodec {
         }
     }
 
-    private fun layerFromDto(dto: LayerDto): Layer {
+    internal fun layerFromDto(dto: LayerDto): Layer {
         val t = transformFromDto(dto.transform)
         return when (dto) {
             is ImageLayerDto -> ImageLayer(

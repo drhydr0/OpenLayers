@@ -179,5 +179,26 @@
     <string name="scope_editing">Editing inside: %1$s</string>
     <string name="scope_exit">Done</string>
     <string name="scope_exit_description">Finish editing inside this group</string>
+    <string name="editor_add_sticker">Sticker</string>
+    <string name="editor_add_sticker_description">Insert a sticker from your collection</string>
+    <string name="action_make_sticker">Make sticker (copy as one object)</string>
+    <string name="action_save_sticker">Save to sticker collection</string>
+    <string name="default_sticker_name">Sticker</string>
+    <string name="sticker_save_title">Save sticker</string>
+    <string name="sticker_name_hint">Sticker name</string>
+    <string name="sticker_save_confirm">Save</string>
+    <string name="sticker_saved">Saved to your sticker collection</string>
+    <string name="sticker_save_failed">Could not save the sticker.</string>
+    <string name="sticker_insert_failed">Could not insert the sticker.</string>
+    <string name="stickers_title">Sticker collection</string>
+    <string name="stickers_empty">No saved stickers yet. Select layers, then Actions → Save to sticker collection.</string>
+    <string name="stickers_close">Close</string>
+    <string name="sticker_insert_description">Insert %1$s</string>
+    <string name="sticker_more_description">More options for %1$s</string>
+    <string name="sticker_rename">Rename</string>
+    <string name="sticker_rename_title">Rename sticker</string>
+    <string name="sticker_delete">Delete</string>
+    <string name="sticker_delete_title">Delete %1$s?</string>
+    <string name="sticker_delete_message">It will be removed from your collection. Stickers already placed in projects are not affected.</string>
     <string name="editor_open_failed">Could not open the project.</string>
 </resources>

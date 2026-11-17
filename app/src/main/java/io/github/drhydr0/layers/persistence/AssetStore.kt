@@ -42,6 +42,9 @@ class AssetStore internal constructor(private val dir: File) {
         }
     }
 
+    /** Copies an image file from another store. The id is recomputed from the bytes. */
+    fun importFile(file: File): AssetId = file.inputStream().use(::put)
+
     /**
      * Deletes stored images not in [keep] and returns how many were removed. Only call
      * when no import for this project is in flight, or a just-imported image could go.

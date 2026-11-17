@@ -32,11 +32,19 @@ Deferred, with reasons:
 
 ## Steps
 
-| # | Step | Verified by |
-| --- | --- | --- |
-| 1 | Close Reliable editing, add this plan | Review |
-| 2 | Layer tree, group/ungroup/duplicate commands, format v3 | JVM tests |
-| 3 | Draw, hit-test, and export groups; layers panel with expandable groups | JVM tests, phone test |
-| 4 | Group, Ungroup, Duplicate actions; editing inside a group | JVM tests, phone test |
-| 5 | Make sticker; sticker collection: save, list, insert, rename, delete | JVM tests, phone test |
-| 6 | Docs and the combined phone test | Phone test |
+All 6 steps are built.
+
+| # | Step | PR | Verified by |
+| --- | --- | --- | --- |
+| 1 | Close Reliable editing, add this plan | #21 | Review |
+| 2 | Layer tree, group/ungroup/duplicate commands, format v3 | #21 | JVM tests |
+| 3 | Draw, hit-test, and export groups; layers panel with expandable groups | #21 | JVM tests, phone test |
+| 4 | Group, Ungroup, Duplicate actions; editing inside a group | #21 | JVM tests, phone test |
+| 5 | Make sticker; sticker collection: save, list, insert, rename, delete | final PR | JVM tests, phone test |
+| 6 | Docs and the combined phone test | final PR | Phone test |
+
+Notes:
+
+- New images, text, and inserted stickers always go on the top level; the editor steps out of any group first.
+- To change a saved sticker, save the edited version as a new sticker and delete the old one. Stickers already placed are never affected.
+- Rendering and gestures still have no automated tests (emulator tests are planned for M7), so `milestone_4_phone_test.md` covers them.
