@@ -149,5 +149,14 @@
     <string name="layers_unlock">Unlock %1$s</string>
     <string name="layers_toggle_visible_generic">Show or hide layer</string>
     <string name="layers_toggle_lock_generic">Lock or unlock layer</string>
+    <string name="editor_multiselect">Multi</string>
+    <string name="editor_multiselect_off">Multiselect: off. Tap to select several layers.</string>
+    <string name="editor_multiselect_on">Multiselect: on. Tap layers to add or remove them.</string>
+    <plurals name="selection_count">
+        <item quantity="one">%d layer selected</item>
+        <item quantity="other">%d layers selected</item>
+    </plurals>
+    <string name="selection_delete">Delete</string>
+    <string name="selection_delete_description">Delete the selected layers</string>
     <string name="editor_open_failed">Could not open the project.</string>
 </resources>

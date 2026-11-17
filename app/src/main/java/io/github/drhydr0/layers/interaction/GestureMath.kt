@@ -46,6 +46,34 @@ object GestureMath {
         )
     }
 
+    /**
+     * Group corner handle: scales a layer around a shared [pivot], so several layers grow
+     * or shrink together and keep their arrangement. [factor] should come from [groupFactor].
+     */
+    fun scaleAround(start: Transform, pivot: Vec2, factor: Double): Transform = start.copy(
+        position = pivot + (start.position - pivot) * factor,
+        scaleX = start.scaleX * factor,
+        scaleY = start.scaleY * factor,
+    )
+
+    /** Group rotation handle: turns a layer around a shared [pivot]. */
+    fun rotateAround(start: Transform, pivot: Vec2, turnDegrees: Double): Transform = start.copy(
+        position = pivot + rotate(start.position - pivot, turnDegrees),
+        rotationDegrees = normalizeDegrees(start.rotationDegrees + turnDegrees),
+    )
+
+    /** Scale factor for a handle dragged [from] to [to] around [pivot], limited so no layer in [starts] leaves the scale range. */
+    fun groupFactor(starts: Collection<Transform>, pivot: Vec2, from: Vec2, to: Vec2): Double {
+        val startDistance = distance(pivot, from)
+        if (startDistance < 1e-6 || starts.isEmpty()) return 1.0
+        val smallest = starts.minOf { minOf(it.scaleX, it.scaleY) }
+        val largest = starts.maxOf { maxOf(it.scaleX, it.scaleY) }
+        return (distance(pivot, to) / startDistance).coerceIn(MIN_SCALE / smallest, MAX_SCALE / largest)
+    }
+
+    fun turnDegrees(pivot: Vec2, from: Vec2, to: Vec2): Double =
+        angleDegrees(to - pivot) - angleDegrees(from - pivot)
+
     /** Corner handle: uniform scale around the layer center, keeping the aspect ratio. */
     fun scaleFromCorner(start: Transform, from: Vec2, to: Vec2): Transform {
         val center = start.position

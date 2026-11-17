@@ -32,7 +32,7 @@ class LayersPanel(
     private val onDelete: (Layer) -> Unit,
 ) {
     private var rows: MutableList<Layer> = mutableListOf()
-    private var selectedId: LayerId? = null
+    private var selectedIds: Set<LayerId> = emptySet()
     private var dragFrom = -1
     private val adapter = Adapter()
 
@@ -67,11 +67,11 @@ class LayersPanel(
         touchHelper.attachToRecyclerView(list)
     }
 
-    fun show(document: Document, selected: LayerId?) {
+    fun show(document: Document, selected: Set<LayerId>) {
         // Don't rebuild under a finger mid-drag; the drop commits and refreshes.
         if (dragFrom >= 0) return
         rows = document.layers.asReversed().toMutableList()
-        selectedId = selected
+        selectedIds = selected
         @Suppress("NotifyDataSetChanged") // Layer lists are rebuilt from immutable snapshots.
         adapter.notifyDataSetChanged()
     }
@@ -130,7 +130,7 @@ class LayersPanel(
                 if (layer.locked) R.string.layers_unlock else R.string.layers_lock, layer.name,
             )
             lock.setOnClickListener { onToggleLocked(layer) }
-            itemView.isActivated = layer.id == selectedId
+            itemView.isActivated = layer.id in selectedIds
             itemView.contentDescription = context.getString(R.string.layers_select_description, layer.name)
             itemView.setOnClickListener { onSelect(layer.id) }
             handle.contentDescription = context.getString(R.string.layers_drag_description, layer.name)
