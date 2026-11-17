@@ -18,8 +18,27 @@ jobs:
     env:
       # A PR checkout's HEAD is a temporary merge commit; show the branch head instead.
       LAYERS_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+      # Same key as the dev release, so a PR APK installs over it without an uninstall.
+      # Secrets are absent for PRs from forks; the build then uses a throwaway debug key.
+      KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+      LAYERS_KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+      LAYERS_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+      LAYERS_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      # Use the base branch's commit count so a PR build never has a higher versionCode
+      # than the next dev release, which would block updating back to dev.
+      - name: Version code
+        run: echo "LAYERS_VERSION_CODE=$(git rev-list --count ${{ github.event.pull_request.base.sha || github.sha }})" >> "$GITHUB_ENV"
+
+      - name: Decode signing key
+        if: env.KEYSTORE_BASE64 != ''
+        run: |
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/layers.jks"
+          echo "LAYERS_KEYSTORE_PATH=$RUNNER_TEMP/layers.jks" >> "$GITHUB_ENV"
 
       - uses: actions/setup-java@v5
         with:
