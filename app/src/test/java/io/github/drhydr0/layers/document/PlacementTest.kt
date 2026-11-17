@@ -37,4 +37,14 @@ class PlacementTest {
         assertEquals(8192.0, bounds.right, 1e-6)
         assertEquals(4096.0, bounds.bottom, 1e-6)
     }
+
+    @Test
+    fun textDefaultsScaleWithCanvas() {
+        val c = CanvasSpec(1080, 1080)
+        assertEquals(864.0, Placement.defaultTextBoxWidth(c), EPS)
+        assertEquals(90.0, Placement.defaultFontSize(c), EPS)
+        assertEquals(540.0, Placement.maxFontSize(c), EPS)
+        // Tiny canvases still get usable sizes.
+        assertEquals(Placement.MIN_FONT_SIZE, Placement.defaultFontSize(CanvasSpec(16, 16)), EPS)
+    }
 }

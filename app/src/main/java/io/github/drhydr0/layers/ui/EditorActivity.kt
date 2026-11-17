@@ -15,8 +15,12 @@ import io.github.drhydr0.layers.diagnostics.AppLog
 import io.github.drhydr0.layers.document.ImageLayer
 import io.github.drhydr0.layers.document.LayerId
 import io.github.drhydr0.layers.document.Placement
+import io.github.drhydr0.layers.document.TextLayer
+import io.github.drhydr0.layers.document.TextStyle
+import io.github.drhydr0.layers.document.Transform
 import io.github.drhydr0.layers.history.AddLayers
 import io.github.drhydr0.layers.history.History
+import io.github.drhydr0.layers.history.UpdateLayer
 import io.github.drhydr0.layers.persistence.SaveQueue
 import io.github.drhydr0.layers.platform.ImageImporter
 import io.github.drhydr0.layers.platform.ImagePicker
@@ -43,6 +47,7 @@ class EditorActivity : Activity() {
         findViewById<Button>(R.id.editor_add_image).setOnClickListener {
             if (session != null) ImagePicker.launch(this, REQUEST_ADD_IMAGE)
         }
+        findViewById<Button>(R.id.editor_add_text).setOnClickListener { addText() }
 
         projectId = intent.getStringExtra(EXTRA_PROJECT_ID) ?: run {
             finish()
@@ -123,6 +128,35 @@ class EditorActivity : Activity() {
                     if (!isDestroyed) Toast.makeText(this, R.string.editor_import_failed, Toast.LENGTH_LONG).show()
                 }
             }
+        }
+    }
+
+    private fun addText() {
+        val canvas = session?.document?.canvas ?: return
+        val style = TextStyle(fontSize = Placement.defaultFontSize(canvas))
+        TextSheet.show(this, R.string.text_add_title, "", style, Placement.maxFontSize(canvas)) { text, chosen ->
+            val current = session ?: return@show
+            val layer = TextLayer(
+                id = LayerId.random(),
+                name = getString(R.string.editor_default_text_name),
+                text = text,
+                style = chosen,
+                boxWidth = Placement.defaultTextBoxWidth(canvas),
+                transform = Transform(position = canvas.bounds.center),
+            )
+            current.commit(AddLayers.onTop(current.document, layer))
+            AppLog.i(TAG, "Added text layer")
+        }
+    }
+
+    /** Opens the text sheet for an existing text layer; one undo step for the whole edit. */
+    fun editText(layer: TextLayer) {
+        val canvas = session?.document?.canvas ?: return
+        TextSheet.show(this, R.string.text_edit_title, layer.text, layer.style, Placement.maxFontSize(canvas)) { text, style ->
+            val current = session ?: return@show
+            // The layer may have moved or been edited meanwhile: start from its current state.
+            val latest = current.document.layer(layer.id) as? TextLayer ?: return@show
+            current.commit(UpdateLayer.editText(current.document, latest.copy(text = text, style = style)))
         }
     }
 
