@@ -65,7 +65,6 @@
     <string name="background_transparent">Transparent</string>
 
     <string name="editor_back_description">Back to projects</string>
-    <!-- %1$d = width, %2$d = height in pixels -->
-    <string name="editor_canvas_size">Canvas %1$d × %2$d px\n\nCanvas editing arrives in the next update.</string>
+    <string name="editor_canvas_description">Canvas</string>
     <string name="editor_open_failed">Could not open the project.</string>
 </resources>

@@ -13,6 +13,9 @@ class LayersApp : Application() {
     /** Single background thread for disk work, which must stay off the main thread. */
     val io: ExecutorService = Executors.newSingleThreadExecutor { Thread(it, "layers-io") }
 
+    /** Image decoding, kept apart from [io] so a large decode never delays a save. */
+    val decode: ExecutorService = Executors.newFixedThreadPool(2) { Thread(it, "layers-decode") }
+
     lateinit var crashReports: CrashReportStore
         private set
 
