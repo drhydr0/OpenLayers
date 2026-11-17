@@ -87,3 +87,11 @@ kotlin {
 dependencies {
     testImplementation(libs.junit)
 }
+
+// ArchitectureTest reads source files directly, so source edits must rerun tests even
+// when compiled classes are unchanged (e.g. an unused forbidden import).
+tasks.withType<Test>().configureEach {
+    inputs.dir("src/main/java")
+        .withPathSensitivity(PathSensitivity.RELATIVE)
+        .withPropertyName("architectureSources")
+}
