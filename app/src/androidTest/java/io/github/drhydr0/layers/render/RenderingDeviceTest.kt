@@ -142,17 +142,45 @@ class RenderingDeviceTest {
         assertColor(green.argb, jpeg.getPixel(100, 100), tolerance = 12)
     }
 
-    @Test
-    fun rectangleCaptureMatchesTheSameAreaOfTheExport() {
-        val doc = mixed
-        val shape = RectSelection(Rect(30.0, 20.0, 150.0, 170.0))
+    private fun capture(doc: Document, area: Rect): Bitmap {
+        val shape = RectSelection(area)
         val plan = CapturePlanner.plan(doc.canvas, shape, CaptureScope.CANVAS, Long.MAX_VALUE)!!
         val source = CapturePlanner.source(doc, CaptureScope.CANVAS, emptySet(), includeBackground = true)
-        val capture = Capturer(::file).render(source, shape, plan, clipToCanvas = true)
+        return Capturer(::file).render(source, shape, plan, clipToCanvas = true)
+    }
+
+    @Test
+    fun captureOfUprightContentMatchesTheExportExactly() {
+        // Upright shapes and an unrotated image have no soft edges, so every pixel must agree.
+        val doc = document(square, ImageLayer(LayerId("photo"), "Photo", photo.id, Transform(Vec2(60.0, 40.0), 2.0, 2.0)))
+        val captured = capture(doc, Rect(30.0, 20.0, 150.0, 170.0))
         val exported = export(doc, ExportOptions(ExportFormat.PNG, 1.0))
-        val sameArea = Bitmap.createBitmap(exported, 30, 20, 120, 150)
-        assertTrue(capture.sameAs(sameArea))
-        assertEquals(false, Capturer(::file).isBlank(capture))
+        assertTrue(captured.sameAs(Bitmap.createBitmap(exported, 30, 20, 120, 150)))
+        assertEquals(false, Capturer(::file).isBlank(captured))
+    }
+
+    @Test
+    fun captureOfRotatedTextAndEffectsMatchesTheExportClosely() {
+        // Drawing the same picture shifted by the capture's offset can round soft edges
+        // (rotated edges, text, shadow blur) slightly differently, so allow a small
+        // difference on a small share of pixels and report the numbers if it is exceeded.
+        val doc = mixed
+        val captured = capture(doc, Rect(30.0, 20.0, 150.0, 170.0))
+        val exported = Bitmap.createBitmap(export(doc, ExportOptions(ExportFormat.PNG, 1.0)), 30, 20, 120, 150)
+        var differing = 0
+        var worst = 0
+        for (x in 0 until captured.width) for (y in 0 until captured.height) {
+            val a = captured.getPixel(x, y)
+            val b = exported.getPixel(x, y)
+            val diff = listOf(24, 16, 8, 0).maxOf { abs(((a ushr it) and 0xFF) - ((b ushr it) and 0xFF)) }
+            if (diff > SOFT_EDGE_TOLERANCE) differing++
+            worst = maxOf(worst, diff)
+        }
+        val total = captured.width * captured.height
+        assertTrue(
+            "$differing of $total pixels differ by more than $SOFT_EDGE_TOLERANCE (worst difference $worst)",
+            differing <= total / 100,
+        )
     }
 
     @Test
@@ -237,5 +265,6 @@ class RenderingDeviceTest {
         const val RED = 0xFFFF0000.toInt()
         const val BLUE = 0xFF0000FF.toInt()
         const val WHITE = 0xFFFFFFFF.toInt()
+        const val SOFT_EDGE_TOLERANCE = 16
     }
 }

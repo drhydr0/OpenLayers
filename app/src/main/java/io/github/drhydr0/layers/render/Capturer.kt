@@ -42,8 +42,10 @@ class Capturer(private val fileFor: (AssetId) -> File) {
     }
 
     /**
-     * Keeps only what lies inside the shape. Done by erasing with an anti-aliased path
-     * instead of clipping, so a lasso's edge is smooth.
+     * Keeps only what lies inside the shape and clears everything else. The shape is
+     * drawn, anti-aliased, into its own layer, and that whole layer is then used as the
+     * mask. Drawing the shape directly with a masking paint would not work: a paint only
+     * touches the pixels its shape covers, so the outside would be left untouched.
      */
     private fun mask(canvas: Canvas, shape: SelectionShape) {
         val keep = Path()
@@ -57,8 +59,10 @@ class Capturer(private val fileFor: (AssetId) -> File) {
             }
         }
         keep.fillType = Path.FillType.EVEN_ODD
-        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { xfermode = PorterDuffXfermode(PorterDuff.Mode.DST_IN) }
-        canvas.drawPath(keep, paint)
+        val asMask = Paint().apply { xfermode = PorterDuffXfermode(PorterDuff.Mode.DST_IN) }
+        val save = canvas.saveLayer(null, asMask)
+        canvas.drawPath(keep, Paint(Paint.ANTI_ALIAS_FLAG))
+        canvas.restoreToCount(save)
     }
 
     /** True when every pixel is fully transparent: the selection caught nothing. */
