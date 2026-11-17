@@ -326,6 +326,7 @@ class EditorActivity : Activity() {
             when (val layer = selectedSingle()) {
                 is TextLayer -> editText(layer)
                 is ShapeLayer -> editShape(layer)
+                is ImageLayer -> editImage(layer)
                 else -> Unit
             }
         }
@@ -494,6 +495,7 @@ class EditorActivity : Activity() {
                 spread.add(GROUP_DISTRIBUTE, Distribution.HORIZONTAL.ordinal, 0, R.string.distribute_horizontal)
                 spread.add(GROUP_DISTRIBUTE, Distribution.VERTICAL.ordinal, 1, R.string.distribute_vertical)
             }
+            if (selected.size == 1) menu.add(0, ACTION_OPACITY, 3, R.string.action_opacity)
             menu.add(0, ACTION_MAKE_STICKER, 4, R.string.action_make_sticker)
             menu.add(0, ACTION_SAVE_STICKER, 5, R.string.action_save_sticker)
             if (singleGroup != null) {
@@ -520,6 +522,7 @@ class EditorActivity : Activity() {
                     ACTION_GROUP -> groupSelection()
                     ACTION_UNGROUP -> singleGroup?.let(::ungroup)
                     ACTION_EDIT_GROUP -> singleGroup?.let { g -> touch.enterScope(g.id) }
+                    ACTION_OPACITY -> selected.singleOrNull()?.let(::askOpacity)
                     ACTION_MAKE_STICKER -> makeSticker()
                     ACTION_SAVE_STICKER -> askSaveSticker()
                 }
@@ -678,13 +681,16 @@ class EditorActivity : Activity() {
     private fun refreshSelectionBar() {
         // One button for whatever the selected layer lets you edit.
         val editable = selectedSingle()
-        editTextButton.visibility = if (editable is TextLayer || editable is ShapeLayer) View.VISIBLE else View.GONE
-        if (editable is ShapeLayer) {
-            editTextButton.setText(R.string.selection_edit_shape)
-            editTextButton.contentDescription = getString(R.string.selection_edit_shape_description)
-        } else {
-            editTextButton.setText(R.string.selection_edit_text)
-            editTextButton.contentDescription = getString(R.string.selection_edit_text_description)
+        val (label, description) = when (editable) {
+            is TextLayer -> R.string.selection_edit_text to R.string.selection_edit_text_description
+            is ShapeLayer -> R.string.selection_edit_shape to R.string.selection_edit_shape_description
+            is ImageLayer -> R.string.selection_edit_image to R.string.selection_edit_image_description
+            else -> null to null
+        }
+        editTextButton.visibility = if (label == null) View.GONE else View.VISIBLE
+        if (label != null && description != null) {
+            editTextButton.setText(label)
+            editTextButton.contentDescription = getString(description)
         }
         val count = touch.selectedIds.size
         selectionBar.visibility = if (count == 0) View.GONE else View.VISIBLE
@@ -865,6 +871,38 @@ class EditorActivity : Activity() {
         AppLog.i(TAG, "Added shape $kind")
     }
 
+    private fun editImage(image: ImageLayer) {
+        val asset = session?.document?.assets?.get(image.assetId) ?: return
+        // Edit the layer as it is now, so the crop keeps the picture in place from here.
+        val latest = session?.document?.layer(image.id) as? ImageLayer ?: return
+        ImageSheet.show(this, latest, asset) { edited ->
+            val current = session ?: return@show
+            if (current.document.layer(image.id) != null) {
+                current.commit(UpdateLayer.of(current.document, edited, "Adjust image"))
+            }
+        }
+    }
+
+    /** A see-through slider for the selected layer of any kind. */
+    private fun askOpacity(layer: Layer) {
+        var opacity = layer.opacity
+        val controls = SheetControls(this)
+        controls.slider(
+            getString(R.string.opacity_title), 0.0, 1.0, OPACITY_STEPS, opacity,
+            { getString(R.string.percent_value, (it * 100).toInt()) },
+        ) { opacity = it }
+        AlertDialog.Builder(this)
+            .setTitle(R.string.opacity_title)
+            .setView(controls.view)
+            .setPositiveButton(R.string.text_done) { _, _ ->
+                val current = session ?: return@setPositiveButton
+                val latest = current.document.layer(layer.id) ?: return@setPositiveButton
+                current.commit(UpdateLayer.of(current.document, latest.withOpacity(opacity), "Change opacity"))
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
     private fun editShape(shape: ShapeLayer) {
         val canvas = session?.document?.canvas ?: return
         ShapeSheet.show(this, shape, maxOf(canvas.width, canvas.height).toDouble()) { edited ->
@@ -921,6 +959,8 @@ class EditorActivity : Activity() {
         private const val ACTION_EDIT_GROUP = 4
         private const val ACTION_MAKE_STICKER = 5
         private const val ACTION_SAVE_STICKER = 6
+        private const val ACTION_OPACITY = 7
+        private const val OPACITY_STEPS = 100
         private const val DUPLICATE_OFFSET_FRACTION = 0.04
         private const val BYTES_PER_PIXEL = 4
         private const val ADD_IMAGE = 101

@@ -2,29 +2,29 @@ package io.github.drhydr0.layers.ui
 
 import android.app.Activity
 import android.app.AlertDialog
-import android.content.res.ColorStateList
-import android.graphics.drawable.GradientDrawable
-import android.view.View
+import android.text.InputType
 import android.view.WindowManager
+import android.widget.ArrayAdapter
 import android.widget.EditText
-import android.widget.LinearLayout
+import android.widget.RadioButton
 import android.widget.RadioGroup
-import android.widget.SeekBar
-import android.widget.TextView
+import android.widget.Spinner
 import io.github.drhydr0.layers.R
-import io.github.drhydr0.layers.document.Color
+import io.github.drhydr0.layers.document.FontFamily
 import io.github.drhydr0.layers.document.Placement
 import io.github.drhydr0.layers.document.TextAlignment
 import io.github.drhydr0.layers.document.TextStyle
 import kotlin.math.roundToInt
 
-/** Edits a text layer's words, size, color, and alignment. Used for adding and editing. */
+/** Edits a text layer's words and style. Used for adding and editing; one undo step on Done. */
 object TextSheet {
 
-    private val colorNames = listOf(
-        R.string.color_black, R.string.color_white, R.string.color_gray, R.string.color_red,
-        R.string.color_orange, R.string.color_yellow, R.string.color_green, R.string.color_blue,
-        R.string.color_purple, R.string.color_pink,
+    private val fontNames = listOf(
+        FontFamily.SANS to R.string.font_sans,
+        FontFamily.SERIF to R.string.font_serif,
+        FontFamily.MONOSPACE to R.string.font_monospace,
+        FontFamily.CASUAL to R.string.font_casual,
+        FontFamily.CURSIVE to R.string.font_cursive,
     )
 
     fun show(
@@ -35,71 +35,101 @@ object TextSheet {
         maxFontSize: Double,
         onDone: (text: String, style: TextStyle) -> Unit,
     ) {
-        val view = activity.layoutInflater.inflate(R.layout.dialog_text, null)
-        val input = view.findViewById<EditText>(R.id.text_input)
-        val sizeLabel = view.findViewById<TextView>(R.id.text_size_label)
-        val size = view.findViewById<SeekBar>(R.id.text_size)
-        val swatches = view.findViewById<LinearLayout>(R.id.text_colors)
-        val alignment = view.findViewById<RadioGroup>(R.id.text_alignment)
+        var style = initialStyle
+        val controls = SheetControls(activity)
 
-        input.setText(initialText)
-        input.setSelection(input.text.length)
+        val input = EditText(activity).apply {
+            setText(initialText)
+            setSelection(text.length)
+            hint = activity.getString(R.string.text_hint)
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+            maxLines = MAX_INPUT_LINES
+            minimumHeight = (TOUCH_DP * resources.displayMetrics.density).toInt()
+        }
+        controls.add(input)
 
         val minSize = Placement.MIN_FONT_SIZE
-        size.max = (maxFontSize - minSize).roundToInt().coerceAtLeast(1)
-        size.progress = (initialStyle.fontSize - minSize).roundToInt().coerceIn(0, size.max)
-        fun currentSize() = minSize + size.progress
-        fun updateSizeLabel() {
-            sizeLabel.text = activity.getString(R.string.text_size_label, currentSize().roundToInt())
-        }
-        updateSizeLabel()
-        size.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(bar: SeekBar, progress: Int, fromUser: Boolean) = updateSizeLabel()
-            override fun onStartTrackingTouch(bar: SeekBar) = Unit
-            override fun onStopTrackingTouch(bar: SeekBar) = Unit
-        })
+        val top = maxOf(maxFontSize, initialStyle.fontSize, minSize + 1)
+        controls.slider(
+            activity.getString(R.string.text_size_title), minSize, top, (top - minSize).roundToInt().coerceAtLeast(1),
+            initialStyle.fontSize, { activity.getString(R.string.pixels_value, it.roundToInt()) },
+        ) { style = style.copy(fontSize = it) }
 
-        var color = initialStyle.color
-        val swatchViews = TextPalette.colors.mapIndexed { i, c ->
-            View(activity).apply {
-                val px = (SWATCH_DP * activity.resources.displayMetrics.density).roundToInt()
-                layoutParams = LinearLayout.LayoutParams(px, px).apply { marginEnd = px / 6 }
-                background = GradientDrawable().apply {
-                    shape = GradientDrawable.OVAL
-                    setColor(c.argb)
-                    setStroke(px / 16, ColorStateList.valueOf(OUTLINE))
-                }
-                contentDescription = activity.getString(colorNames[i])
-                setOnClickListener {
-                    color = c
-                    markSelected(swatches, this)
-                }
-                swatches.addView(this)
-            }
-        }
-        (swatchViews.getOrNull(TextPalette.colors.indexOf(color)))?.let { markSelected(swatches, it) }
+        controls.colors(activity.getString(R.string.text_color_label), style.color, allowNone = false) { style = style.copy(color = it) }
 
-        alignment.check(
-            when (initialStyle.alignment) {
-                TextAlignment.START -> R.id.align_start
-                TextAlignment.CENTER -> R.id.align_center
-                TextAlignment.END -> R.id.align_end
+        controls.label(activity.getString(R.string.text_font_label))
+        controls.add(
+            Spinner(activity).apply {
+                adapter = ArrayAdapter(
+                    activity, android.R.layout.simple_spinner_dropdown_item, fontNames.map { activity.getString(it.second) },
+                )
+                setSelection(fontNames.indexOfFirst { it.first == style.fontFamily }.coerceAtLeast(0))
+                contentDescription = activity.getString(R.string.text_font_label)
+                minimumHeight = (TOUCH_DP * resources.displayMetrics.density).toInt()
+                onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
+                    override fun onItemSelected(parent: android.widget.AdapterView<*>?, v: android.view.View?, position: Int, id: Long) {
+                        style = style.copy(fontFamily = fontNames[position].first)
+                    }
+                    override fun onNothingSelected(parent: android.widget.AdapterView<*>?) = Unit
+                }
             },
         )
+        controls.checkBox(activity.getString(R.string.text_bold), style.bold) { style = style.copy(bold = it) }
+        controls.checkBox(activity.getString(R.string.text_italic), style.italic) { style = style.copy(italic = it) }
+
+        controls.label(activity.getString(R.string.text_alignment_label))
+        val alignment = RadioGroup(activity).apply { orientation = RadioGroup.HORIZONTAL }
+        val alignments = listOf(
+            TextAlignment.START to R.string.text_align_start,
+            TextAlignment.CENTER to R.string.text_align_center,
+            TextAlignment.END to R.string.text_align_end,
+        )
+        alignments.forEach { (value, name) ->
+            alignment.addView(
+                RadioButton(activity).apply {
+                    id = android.view.View.generateViewId()
+                    text = activity.getString(name)
+                    tag = value
+                    minimumHeight = (TOUCH_DP * resources.displayMetrics.density).toInt()
+                    isChecked = value == style.alignment
+                    layoutParams = RadioGroup.LayoutParams(0, RadioGroup.LayoutParams.WRAP_CONTENT, 1f)
+                },
+            )
+        }
+        alignment.setOnCheckedChangeListener { group, id ->
+            (group.findViewById<RadioButton>(id)?.tag as? TextAlignment)?.let { style = style.copy(alignment = it) }
+        }
+        controls.add(alignment)
+
+        fun times(v: Double) = activity.getString(R.string.times_value, v)
+        controls.slider(
+            activity.getString(R.string.text_line_spacing), TextStyle.MIN_LINE_SPACING, TextStyle.MAX_LINE_SPACING,
+            LINE_STEPS, style.lineSpacing, ::times,
+        ) { style = style.copy(lineSpacing = it) }
+        controls.slider(
+            activity.getString(R.string.text_letter_spacing), TextStyle.MIN_LETTER_SPACING, TextStyle.MAX_LETTER_SPACING,
+            LETTER_STEPS, style.letterSpacing, { activity.getString(R.string.percent_signed, (it * 100).roundToInt()) },
+        ) { style = style.copy(letterSpacing = it) }
+
+        controls.colors(activity.getString(R.string.text_outline_color), style.outlineColor, allowNone = true) {
+            style = style.copy(outlineColor = it)
+        }
+        controls.slider(
+            activity.getString(R.string.text_outline_width), OUTLINE_MIN, TextStyle.MAX_OUTLINE_WIDTH, OUTLINE_STEPS,
+            style.outlineWidth, { activity.getString(R.string.percent_value, (it * 100).roundToInt()) },
+        ) { style = style.copy(outlineWidth = it) }
+        controls.colors(activity.getString(R.string.text_background_color), style.backgroundColor, allowNone = true) {
+            style = style.copy(backgroundColor = it)
+        }
+        controls.checkBox(activity.getString(R.string.text_shadow), style.shadow) { style = style.copy(shadow = it) }
 
         val dialog = AlertDialog.Builder(activity)
             .setTitle(titleRes)
-            .setView(view)
+            .setView(controls.view)
             .setPositiveButton(R.string.text_done) { _, _ ->
                 val text = input.text.toString()
                 // Blank text would be an invisible, unselectable layer.
-                if (text.isBlank()) return@setPositiveButton
-                val align = when (alignment.checkedRadioButtonId) {
-                    R.id.align_start -> TextAlignment.START
-                    R.id.align_end -> TextAlignment.END
-                    else -> TextAlignment.CENTER
-                }
-                onDone(text, TextStyle(currentSize(), color, align))
+                if (text.isNotBlank()) onDone(text, style)
             }
             .setNegativeButton(android.R.string.cancel, null)
             .create()
@@ -108,16 +138,10 @@ object TextSheet {
         input.requestFocus()
     }
 
-    private fun markSelected(row: LinearLayout, selected: View) {
-        for (i in 0 until row.childCount) {
-            val child = row.getChildAt(i)
-            child.isSelected = child == selected
-            child.scaleX = if (child == selected) SELECTED_SCALE else 1f
-            child.scaleY = child.scaleX
-        }
-    }
-
-    private const val SWATCH_DP = 40
-    private const val SELECTED_SCALE = 1.2f
-    private val OUTLINE = Color(0xFF808080.toInt()).argb
+    private const val TOUCH_DP = 48
+    private const val MAX_INPUT_LINES = 6
+    private const val LINE_STEPS = 24
+    private const val LETTER_STEPS = 22
+    private const val OUTLINE_MIN = 0.01
+    private const val OUTLINE_STEPS = 29
 }

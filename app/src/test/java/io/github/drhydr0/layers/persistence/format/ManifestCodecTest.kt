@@ -3,7 +3,10 @@ package io.github.drhydr0.layers.persistence.format
 import io.github.drhydr0.layers.document.AssetId
 import io.github.drhydr0.layers.document.CanvasSpec
 import io.github.drhydr0.layers.document.Color
+import io.github.drhydr0.layers.document.Crop
 import io.github.drhydr0.layers.document.Document
+import io.github.drhydr0.layers.document.FontFamily
+import io.github.drhydr0.layers.document.ImageAdjustments
 import io.github.drhydr0.layers.document.ImageAsset
 import io.github.drhydr0.layers.document.ImageLayer
 import io.github.drhydr0.layers.document.LayerId
@@ -66,7 +69,7 @@ class ManifestCodecTest {
 
     @Test
     fun encodedFileIsVersioned() {
-        assertTrue(ManifestCodec.encode(manifest).contains("\"formatVersion\": 4"))
+        assertTrue(ManifestCodec.encode(manifest).contains("\"formatVersion\": 5"))
     }
 
     @Test
@@ -211,6 +214,28 @@ class ManifestCodecTest {
     }
 
     @Test
+    fun roundTripPreservesTextStylingAndImageAdjustments() {
+        val styled = TextLayer(
+            LayerId("styled"), "Styled", "Fancy",
+            TextStyle(
+                80.0, Color.WHITE, TextAlignment.END, FontFamily.CURSIVE, bold = true, italic = true,
+                lineSpacing = 1.4, letterSpacing = 0.15, outlineColor = Color.BLACK, outlineWidth = 0.1,
+                backgroundColor = Color.argb(200, 30, 60, 90), shadow = true,
+            ),
+            boxWidth = 600.0,
+        )
+        val adjusted = ImageLayer(
+            LayerId("adjusted"), "Adjusted", assetA.id,
+            adjustments = ImageAdjustments(0.25, -0.5, 1.0), crop = Crop(0.1, 0.2, 0.9, 0.75),
+        )
+        val doc = manifest.document.copy(layers = manifest.document.layers + styled + adjusted)
+        val withStyles = manifest.copy(document = doc)
+        assertEquals(withStyles, ManifestCodec.decode(ManifestCodec.encode(withStyles)))
+        assertFails("inconsistent", ManifestCodec.encode(withStyles).replace("\"cursive\"", "\"wingdings\""))
+        assertFails("inconsistent", ManifestCodec.encode(withStyles).replace("\"cropRight\": 0.9", "\"cropRight\": 1.5"))
+    }
+
+    @Test
     fun damagedHistoryFailsClearly() {
         val encoded = ManifestCodec.encode(manifest)
         val broken = encoded.replace("\"undo\": []", "\"undo\": [ { \"type\": \"teleport\" } ]")
@@ -226,7 +251,7 @@ class ManifestCodecTest {
 
     @Test
     fun rejectsNewerFormat() {
-        val newer = ManifestCodec.encode(manifest).replace("\"formatVersion\": 4", "\"formatVersion\": 5")
+        val newer = ManifestCodec.encode(manifest).replace("\"formatVersion\": 5", "\"formatVersion\": 6")
         assertFails("newer version", newer)
     }
 
@@ -234,7 +259,7 @@ class ManifestCodecTest {
     fun rejectsBrokenFiles() {
         assertFails("not valid JSON", "{ truncated")
         assertFails("no format version", "{}")
-        assertFails("damaged", """{ "formatVersion": 4 }""")
+        assertFails("damaged", """{ "formatVersion": 5 }""")
         // A layer pointing at an asset that isn't listed.
         val missingAsset = ManifestCodec.encode(manifest).replace("\"assetId\": \"${"b".repeat(64)}\"", "\"assetId\": \"${"d".repeat(64)}\"")
         assertFails("inconsistent", missingAsset)

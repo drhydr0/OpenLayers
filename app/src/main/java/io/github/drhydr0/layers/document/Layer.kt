@@ -26,6 +26,8 @@ data class ImageLayer(
     override val opacity: Double = 1.0,
     override val visible: Boolean = true,
     override val locked: Boolean = false,
+    val adjustments: ImageAdjustments = ImageAdjustments.NONE,
+    val crop: Crop = Crop.FULL,
 ) : Layer {
     init {
         requireOpacity(opacity)
@@ -40,14 +42,109 @@ data class ImageLayer(
 
 enum class TextAlignment { START, CENTER, END }
 
+/** Typefaces every Android phone has built in, so projects never depend on font files. */
+enum class FontFamily { SANS, SERIF, MONOSPACE, CASUAL, CURSIVE }
+
 data class TextStyle(
     /** Canvas pixels at scale 1. */
     val fontSize: Double = 64.0,
     val color: Color = Color.BLACK,
     val alignment: TextAlignment = TextAlignment.CENTER,
+    val fontFamily: FontFamily = FontFamily.SANS,
+    val bold: Boolean = false,
+    val italic: Boolean = false,
+    /** Line height as a multiple of the font's normal line height. */
+    val lineSpacing: Double = 1.0,
+    /** Extra space between letters, in ems (fractions of the font size). */
+    val letterSpacing: Double = 0.0,
+    /** Transparent means no outline. */
+    val outlineColor: Color = Color.TRANSPARENT,
+    /** Outline thickness as a fraction of the font size, so it scales with the text. */
+    val outlineWidth: Double = 0.06,
+    /** Transparent means no background. Drawn as a rounded box behind the text. */
+    val backgroundColor: Color = Color.TRANSPARENT,
+    val shadow: Boolean = false,
 ) {
     init {
         require(fontSize > 0) { "fontSize must be positive" }
+        require(lineSpacing in MIN_LINE_SPACING..MAX_LINE_SPACING) { "lineSpacing out of range" }
+        require(letterSpacing in MIN_LETTER_SPACING..MAX_LETTER_SPACING) { "letterSpacing out of range" }
+        require(outlineWidth in 0.0..MAX_OUTLINE_WIDTH) { "outlineWidth out of range" }
+    }
+
+    val hasOutline get() = outlineColor.alpha > 0 && outlineWidth > 0
+    val hasBackground get() = backgroundColor.alpha > 0
+
+    /** Space between the text and the edge of its background box. */
+    val backgroundPadding get() = if (hasBackground) fontSize * BACKGROUND_PADDING else 0.0
+
+    companion object {
+        const val MIN_LINE_SPACING = 0.6
+        const val MAX_LINE_SPACING = 3.0
+        const val MIN_LETTER_SPACING = -0.1
+        const val MAX_LETTER_SPACING = 1.0
+        const val MAX_OUTLINE_WIDTH = 0.3
+        const val BACKGROUND_PADDING = 0.25
+    }
+}
+
+/**
+ * Editable picture settings. They are stored as numbers and applied when drawing, so the
+ * original image is never changed. Each runs from -1 to 1 with 0 meaning unchanged.
+ */
+data class ImageAdjustments(
+    val brightness: Double = 0.0,
+    val contrast: Double = 0.0,
+    val saturation: Double = 0.0,
+) {
+    init {
+        listOf(brightness, contrast, saturation).forEach { require(it in -1.0..1.0) { "adjustment out of range" } }
+    }
+
+    val isNone get() = this == NONE
+
+    /**
+     * The 4 x 5 color matrix (row-major, as android.graphics.ColorMatrix takes it) that
+     * applies saturation, then contrast, then brightness.
+     */
+    fun colorMatrix(): FloatArray {
+        val s = 1 + saturation
+        val c = 1 + contrast
+        // Contrast pivots on mid gray; brightness shifts every channel.
+        val offset = ((1 - c) * 0.5 + brightness) * 255
+        val r = LUMA_R * (1 - s)
+        val g = LUMA_G * (1 - s)
+        val b = LUMA_B * (1 - s)
+        return doubleArrayOf(
+            c * (r + s), c * g, c * b, 0.0, offset,
+            c * r, c * (g + s), c * b, 0.0, offset,
+            c * r, c * g, c * (b + s), 0.0, offset,
+            0.0, 0.0, 0.0, 1.0, 0.0,
+        ).map { it.toFloat() }.toFloatArray()
+    }
+
+    companion object {
+        val NONE = ImageAdjustments()
+        private const val LUMA_R = 0.213
+        private const val LUMA_G = 0.715
+        private const val LUMA_B = 0.072
+    }
+}
+
+/** The part of an image that shows, as fractions of its width and height. The source image is kept whole. */
+data class Crop(val left: Double = 0.0, val top: Double = 0.0, val right: Double = 1.0, val bottom: Double = 1.0) {
+    init {
+        require(left >= 0 && top >= 0 && right <= 1 && bottom <= 1) { "crop must stay inside the image" }
+        require(right - left >= MIN_SIZE && bottom - top >= MIN_SIZE) { "crop is too small" }
+    }
+
+    val width get() = right - left
+    val height get() = bottom - top
+    val isFull get() = this == FULL
+
+    companion object {
+        val FULL = Crop()
+        const val MIN_SIZE = 0.02
     }
 }
 
