@@ -1,6 +1,7 @@
 package io.github.drhydr0.layers.interaction
 
 import android.graphics.Canvas
+import android.graphics.DashPathEffect
 import android.graphics.Paint
 import android.graphics.Path
 import io.github.drhydr0.layers.R
@@ -22,6 +23,7 @@ class SelectionOverlay(
     private val view: DocumentView,
     private val hitTest: HitTest,
     private val selectedIds: () -> Set<LayerId>,
+    private val scopeId: () -> LayerId? = { null },
 ) {
     enum class Handle { CORNER, ROTATE, WIDTH }
 
@@ -37,6 +39,9 @@ class SelectionOverlay(
         color = accent
     }
     private val memberPaint = Paint(outlinePaint).apply { strokeWidth = density }
+    private val scopePaint = Paint(memberPaint).apply {
+        pathEffect = DashPathEffect(floatArrayOf(6 * density, 4 * density), 0f)
+    }
     private val handleFill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFFFFFFF.toInt() }
     private val handleStroke = Paint(outlinePaint)
     private val path = Path()
@@ -69,6 +74,8 @@ class SelectionOverlay(
             ?.first
 
     fun draw(canvas: Canvas, doc: Document) {
+        // A dashed frame marks the group being edited.
+        scopeId()?.let(doc::layer)?.let { outline(canvas, hitTest.corners(doc, it).map(view.viewMatrix::map), scopePaint) }
         val selected = selectedIds().mapNotNull(doc::layer)
         if (selected.isEmpty()) return
         if (selected.size > 1) selected.forEach { outline(canvas, hitTest.corners(doc, it).map(view.viewMatrix::map), memberPaint) }

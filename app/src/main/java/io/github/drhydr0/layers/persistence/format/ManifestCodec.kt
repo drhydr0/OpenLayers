@@ -4,6 +4,7 @@ import io.github.drhydr0.layers.document.AssetId
 import io.github.drhydr0.layers.document.CanvasSpec
 import io.github.drhydr0.layers.document.Color
 import io.github.drhydr0.layers.document.Document
+import io.github.drhydr0.layers.document.GroupLayer
 import io.github.drhydr0.layers.document.ImageAsset
 import io.github.drhydr0.layers.document.ImageLayer
 import io.github.drhydr0.layers.document.Layer
@@ -18,6 +19,7 @@ import io.github.drhydr0.layers.history.Command
 import io.github.drhydr0.layers.history.MoveLayer
 import io.github.drhydr0.layers.history.PlacedLayer
 import io.github.drhydr0.layers.history.RemoveLayers
+import io.github.drhydr0.layers.history.ReplaceLayers
 import io.github.drhydr0.layers.history.SavedHistory
 import io.github.drhydr0.layers.history.TransformLayers
 import io.github.drhydr0.layers.history.UpdateLayer
@@ -49,7 +51,7 @@ class ManifestException(message: String, cause: Throwable? = null) : Exception(m
 /** Converts [ProjectManifest] to and from the versioned JSON file format. */
 object ManifestCodec {
 
-    const val CURRENT_VERSION = 2
+    const val CURRENT_VERSION = 3
 
     /**
      * Upgrades from version N to N+1, keyed by N. A format change bumps [CURRENT_VERSION]
@@ -58,6 +60,8 @@ object ManifestCodec {
     private val migrations: Map<Int, (JsonObject) -> JsonObject> = mapOf(
         // 1 -> 2 added saved history; a version 1 project simply starts with none.
         1 to { obj -> JsonObject(obj + ("formatVersion" to JsonPrimitive(2))) },
+        // 2 -> 3 added groups and parent ids; older files simply have none.
+        2 to { obj -> JsonObject(obj + ("formatVersion" to JsonPrimitive(3))) },
     )
 
     private val json = Json {
@@ -133,8 +137,9 @@ object ManifestCodec {
     }
 
     private fun commandToDto(command: Command): CommandDto = when (command) {
-        is AddLayers -> AddLayersDto(command.placements.map(::placedToDto), command.assets.map(::assetToDto))
+        is AddLayers -> AddLayersDto(command.placements.map(::placedToDto), command.assets.map(::assetToDto), command.verb)
         is RemoveLayers -> RemoveLayersDto(command.removed.map(::placedToDto))
+        is ReplaceLayers -> ReplaceLayersDto(command.label, command.removed.map(::placedToDto), command.added.map(::placedToDto))
         is MoveLayer -> MoveLayerDto(command.id.value, command.from, command.to)
         is TransformLayers -> TransformLayersDto(
             command.label,
@@ -147,8 +152,9 @@ object ManifestCodec {
     }
 
     private fun commandFromDto(dto: CommandDto): Command = when (dto) {
-        is AddLayersDto -> AddLayers(dto.placements.map(::placedFromDto), dto.assets.map(::assetFromDto))
+        is AddLayersDto -> AddLayers(dto.placements.map(::placedFromDto), dto.assets.map(::assetFromDto), dto.verb)
         is RemoveLayersDto -> RemoveLayers(dto.removed.map(::placedFromDto))
+        is ReplaceLayersDto -> ReplaceLayers(dto.removed.map(::placedFromDto), dto.added.map(::placedFromDto), dto.label)
         is MoveLayerDto -> MoveLayer(LayerId(dto.id), dto.from, dto.to)
         is TransformLayersDto -> TransformLayers(
             before = dto.changes.associate { LayerId(it.id) to transformFromDto(it.before) },
@@ -158,8 +164,8 @@ object ManifestCodec {
         is UpdateLayerDto -> UpdateLayer(layerFromDto(dto.before), layerFromDto(dto.after), dto.label)
     }
 
-    private fun placedToDto(p: PlacedLayer) = PlacedLayerDto(p.index, layerToDto(p.layer))
-    private fun placedFromDto(p: PlacedLayerDto) = PlacedLayer(p.index, layerFromDto(p.layer))
+    private fun placedToDto(p: PlacedLayer) = PlacedLayerDto(p.index, layerToDto(p.layer), p.parentId?.value)
+    private fun placedFromDto(p: PlacedLayerDto) = PlacedLayer(p.index, layerFromDto(p.layer), p.parentId?.let(::LayerId))
     private fun assetToDto(a: ImageAsset) = AssetDto(a.id.sha256, a.mimeType, a.width, a.height)
     private fun assetFromDto(a: AssetDto) = ImageAsset(AssetId(a.id), a.mimeType, a.width, a.height)
 
@@ -174,6 +180,9 @@ object ManifestCodec {
         return when (layer) {
             is ImageLayer -> ImageLayerDto(
                 layer.id.value, layer.name, t, layer.opacity, layer.visible, layer.locked, layer.assetId.sha256,
+            )
+            is GroupLayer -> GroupLayerDto(
+                layer.id.value, layer.name, t, layer.opacity, layer.visible, layer.locked, layer.children.map(::layerToDto),
             )
             is TextLayer -> TextLayerDto(
                 layer.id.value, layer.name, t, layer.opacity, layer.visible, layer.locked,
@@ -191,6 +200,9 @@ object ManifestCodec {
         return when (dto) {
             is ImageLayerDto -> ImageLayer(
                 LayerId(dto.id), dto.name, AssetId(dto.assetId), t, dto.opacity, dto.visible, dto.locked,
+            )
+            is GroupLayerDto -> GroupLayer(
+                LayerId(dto.id), dto.name, dto.children.map(::layerFromDto), t, dto.opacity, dto.visible, dto.locked,
             )
             is TextLayerDto -> TextLayer(
                 LayerId(dto.id), dto.name, dto.text,

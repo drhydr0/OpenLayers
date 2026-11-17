@@ -5,8 +5,10 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.ViewConfiguration
 import io.github.drhydr0.layers.document.Document
+import io.github.drhydr0.layers.document.GroupLayer
 import io.github.drhydr0.layers.document.Layer
 import io.github.drhydr0.layers.document.LayerId
+import io.github.drhydr0.layers.document.Matrix
 import io.github.drhydr0.layers.document.Rect
 import io.github.drhydr0.layers.document.TextLayer
 import io.github.drhydr0.layers.document.Transform
@@ -34,6 +36,7 @@ class CanvasTouchController(
     private val commit: (Command) -> Unit,
     private val onSelectionChanged: (Set<LayerId>) -> Unit,
     private val onEditText: (TextLayer) -> Unit,
+    private val onScopeChanged: (LayerId?) -> Unit = {},
 ) : View.OnTouchListener {
 
     private enum class Mode { NONE, MOVE, CORNER, ROTATE, WIDTH }
@@ -42,7 +45,14 @@ class CanvasTouchController(
     var selectedIds: Set<LayerId> = emptySet()
         private set
 
-    val overlay = SelectionOverlay(view, hitTest) { selectedIds }
+    /**
+     * The group being edited, or null for the top level. Touches select and move the
+     * layers directly inside it; everything else stays put.
+     */
+    var scopeId: LayerId? = null
+        private set
+
+    val overlay = SelectionOverlay(view, hitTest, { selectedIds }, { scopeId })
 
     /** While on, taps add layers to or remove them from the selection. */
     var multiSelectMode = false
@@ -68,6 +78,7 @@ class CanvasTouchController(
     private var currentTransforms: Map<LayerId, Transform> = emptyMap()
     private var currentWidth = 0.0
     private var groupPivot = Vec2.ZERO
+    private var scopeInverse = Matrix.IDENTITY
     private val basePoints = mutableMapOf<Int, Vec2>()
     private var downX = 0f
     private var downY = 0f
@@ -76,6 +87,29 @@ class CanvasTouchController(
     private var lastTapId: LayerId? = null
 
     fun select(id: LayerId?) = setSelection(setOfNotNull(id))
+
+    /** Enters a group to edit its children, or returns to the top level with null. */
+    fun enterScope(id: LayerId?) {
+        if (scopeId == id) return
+        cancel()
+        scopeId = id
+        setSelection(emptySet())
+        onScopeChanged(id)
+        view.invalidate()
+    }
+
+    /** Selects a layer anywhere in the tree, entering the group that holds it. */
+    fun selectInTree(doc: Document, id: LayerId, addToSelection: Boolean) {
+        val parent = doc.ancestors(id)?.lastOrNull()?.id
+        if (parent != scopeId) {
+            enterScope(parent)
+            select(id)
+        } else if (addToSelection) {
+            toggle(id)
+        } else {
+            select(id)
+        }
+    }
 
     fun toggle(id: LayerId) = setSelection(if (id in selectedIds) selectedIds - id else selectedIds + id)
 
@@ -86,8 +120,25 @@ class CanvasTouchController(
         view.invalidate()
     }
 
+    /**
+     * Center of the selection's bounding box, in the coordinates of the group being edited.
+     * Null when nothing is selected.
+     */
+    fun selectionCenter(doc: Document): Vec2? {
+        val layers = selectedIds.mapNotNull(doc::layer)
+        if (layers.isEmpty()) return null
+        val inverse = doc.matrixOf(scopeId).inverted() ?: return null
+        return Rect.bounding(layers.flatMap { hitTest.corners(doc, it) }.map(inverse::map)).center
+    }
+
     /** Drops selected layers that no longer exist, e.g. after undo. */
     fun documentChanged(doc: Document) {
+        // The edited group may be gone after an undo or ungroup: step out to where it was.
+        val scope = scopeId
+        if (scope != null && doc.layer(scope) !is GroupLayer) {
+            scopeId = null
+            onScopeChanged(null)
+        }
         setSelection(selectedIds.filterTo(LinkedHashSet()) { doc.layer(it) != null })
         view.invalidate()
     }
@@ -114,15 +165,20 @@ class CanvasTouchController(
         downX = event.x
         downY = event.y
         moved = false
-        val point = toCanvas(event.x, event.y)
+        // Gestures are computed in the edited group's own coordinates, so the same math
+        // moves a top-level layer and a child of a rotated, scaled group.
+        scopeInverse = doc.matrixOf(scopeId).inverted() ?: Matrix.IDENTITY
+        val canvasPoint = toCanvas(event.x, event.y)
+        val point = scopeInverse.map(canvasPoint)
         // Locked or hidden layers stay selectable in the panel but can't be moved by touch.
-        val movable = selectedIds.mapNotNull(doc::layer).filter { !it.locked && it.visible }
+        val movable = selectedIds.mapNotNull(doc::layer)
+            .filter { !it.locked && it.visible && doc.ancestors(it.id)?.lastOrNull()?.id == scopeId }
         val handle = overlay.handleAt(doc, movable, event.x, event.y)
-        val hit = hitTest.topmost(doc, point)
+        val hit = hitTest.topmost(doc, canvasPoint, scopeId)
         tappedId = hit?.id
 
         // A finger on the selection keeps it as the target even where another layer covers it.
-        val onSelection = handle != null || movable.any { hitTest.contains(doc, it, point, slop = grabSlop()) } ||
+        val onSelection = handle != null || movable.any { hitTest.contains(doc, it, canvasPoint, slop = grabSlop()) } ||
             (movable.size > 1 && groupBounds(doc, movable).contains(point))
         val targets = when {
             onSelection -> movable
@@ -154,7 +210,7 @@ class CanvasTouchController(
         basePoints.clear()
         val lifted = if (event.actionMasked == MotionEvent.ACTION_POINTER_UP) event.actionIndex else -1
         for (i in 0 until event.pointerCount) {
-            if (i != lifted) basePoints[event.getPointerId(i)] = toCanvas(event.getX(i), event.getY(i))
+            if (i != lifted) basePoints[event.getPointerId(i)] = toScope(event.getX(i), event.getY(i))
         }
         if (event.actionMasked == MotionEvent.ACTION_POINTER_DOWN) moved = true
     }
@@ -169,7 +225,7 @@ class CanvasTouchController(
             if (targetIds.any { it !in selectedIds }) setSelection(targetIds.toCollection(LinkedHashSet()))
         }
         val fingers = (0 until event.pointerCount)
-            .mapNotNull { i -> basePoints[event.getPointerId(i)]?.let { it to toCanvas(event.getX(i), event.getY(i)) } }
+            .mapNotNull { i -> basePoints[event.getPointerId(i)]?.let { it to toScope(event.getX(i), event.getY(i)) } }
         if (fingers.isEmpty()) return
         val (from, to) = fingers[0]
         val single = targetIds.size == 1
@@ -219,6 +275,9 @@ class CanvasTouchController(
         if (isDoubleTap && target is TextLayer) {
             onEditText(target)
             lastTapId = null
+        } else if (isDoubleTap && target is GroupLayer) {
+            enterScope(target.id)
+            lastTapId = null
         } else {
             select(target?.id)
             lastTapId = target?.id
@@ -261,8 +320,11 @@ class CanvasTouchController(
         return TransformLayers.of(doc, currentTransforms, verb)
     }
 
+    /** In the edited group's coordinates, like every gesture point. */
     private fun groupBounds(doc: Document, layers: List<Layer>): Rect =
-        Rect.bounding(layers.flatMap { hitTest.corners(doc, it) })
+        Rect.bounding(layers.flatMap { hitTest.corners(doc, it) }.map(scopeInverse::map))
+
+    private fun toScope(x: Float, y: Float): Vec2 = scopeInverse.map(toCanvas(x, y))
 
     private fun minTextWidth(layer: Layer) = ((layer as? TextLayer)?.style?.fontSize ?: MIN_TEXT_WIDTH)
         .coerceAtLeast(MIN_TEXT_WIDTH)

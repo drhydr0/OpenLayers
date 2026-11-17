@@ -5,6 +5,7 @@ import android.graphics.Canvas
 import android.graphics.Paint
 import io.github.drhydr0.layers.document.AssetId
 import io.github.drhydr0.layers.document.Document
+import io.github.drhydr0.layers.document.GroupLayer
 import io.github.drhydr0.layers.document.ImageLayer
 import io.github.drhydr0.layers.document.Layer
 import io.github.drhydr0.layers.document.TextLayer
@@ -50,8 +51,16 @@ class DocumentRenderer(private val textLayouts: TextLayouts) {
         when (layer) {
             is ImageLayer -> drawImage(target, document, layer, images, alpha)
             is TextLayer -> drawText(target, layer, alpha)
+            is GroupLayer -> drawGroup(target, document, layer, images, alpha)
         }
         target.restoreToCount(save)
+    }
+
+    private fun drawGroup(target: Canvas, document: Document, group: GroupLayer, images: ImageSource, alpha: Int) {
+        // A see-through group is drawn into an offscreen layer first, so overlapping
+        // children fade as one object instead of showing through each other.
+        if (alpha < 255) target.saveLayerAlpha(null, alpha)
+        group.children.forEach { if (it.visible && it.opacity > 0) drawLayer(target, document, it, images) }
     }
 
     private fun drawImage(target: Canvas, document: Document, layer: ImageLayer, images: ImageSource, alpha: Int) {

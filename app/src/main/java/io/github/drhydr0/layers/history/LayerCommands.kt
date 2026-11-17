@@ -1,14 +1,43 @@
 package io.github.drhydr0.layers.history
 
 import io.github.drhydr0.layers.document.Document
+import io.github.drhydr0.layers.document.GroupLayer
+import io.github.drhydr0.layers.document.Grouping
 import io.github.drhydr0.layers.document.ImageAsset
 import io.github.drhydr0.layers.document.Layer
 import io.github.drhydr0.layers.document.LayerId
 import io.github.drhydr0.layers.document.TextLayer
 import io.github.drhydr0.layers.document.Transform
+import io.github.drhydr0.layers.document.Vec2
 
-/** A layer and the stacking index it occupies. */
-data class PlacedLayer(val index: Int, val layer: Layer)
+/**
+ * A layer, the group it sits in ([parentId], null for the top level), and its index there.
+ */
+data class PlacedLayer(val index: Int, val layer: Layer, val parentId: LayerId? = null) {
+    companion object {
+        fun of(document: Document, id: LayerId) =
+            PlacedLayer(document.indexOf(id), document.requireLayer(id), document.parentOf(id))
+    }
+}
+
+/** Indices must ascend within each parent, so in-order inserts land where intended. */
+private fun requireAscending(placements: List<PlacedLayer>) =
+    require(placements.groupBy { it.parentId }.values.all { g -> g.zipWithNext().all { (a, b) -> a.index < b.index } }) {
+        "indices must ascend within each parent"
+    }
+
+private fun Document.inserting(placements: List<PlacedLayer>) =
+    placements.fold(this) { doc, p -> doc.withLayerInserted(p.parentId, p.index, p.layer) }
+
+private fun Document.removing(placements: List<PlacedLayer>) =
+    placements.fold(this) { doc, p -> doc.withLayerRemoved(p.layer.id) }
+
+/** The given layers as placements, leaving out any that sit inside another given layer. */
+private fun placementsOf(document: Document, ids: Collection<LayerId>): List<PlacedLayer> {
+    val unique = ids.toSet()
+    val outermost = unique.filter { id -> document.ancestors(id).orEmpty().none { it.id in unique } }
+    return outermost.map { PlacedLayer.of(document, it) }.sortedBy { it.index }
+}
 
 /**
  * Inserts layers, plus any new assets they need. [placements] give final indices in
@@ -17,52 +46,116 @@ data class PlacedLayer(val index: Int, val layer: Layer)
 data class AddLayers(
     val placements: List<PlacedLayer>,
     val assets: List<ImageAsset> = emptyList(),
+    val verb: String = "Add",
 ) : Command {
     init {
         require(placements.isNotEmpty()) { "nothing to add" }
-        require(placements.zipWithNext().all { (a, b) -> a.index < b.index }) { "indices must ascend" }
+        requireAscending(placements)
     }
 
-    override val label get() = if (placements.size == 1) "Add layer" else "Add ${placements.size} layers"
+    override val label get() = if (placements.size == 1) "$verb layer" else "$verb ${placements.size} layers"
 
     override fun apply(document: Document): Document {
         // Assets stay after undo: they are immutable, and redo or history may need them again.
         val withAssets = assets.fold(document) { doc, asset -> doc.withAsset(asset) }
-        return placements.fold(withAssets) { doc, p -> doc.withLayerInserted(p.index, p.layer) }
+        return withAssets.inserting(placements)
     }
 
-    override fun revert(document: Document): Document =
-        placements.fold(document) { doc, p -> doc.withLayerRemoved(p.layer.id) }
+    override fun revert(document: Document): Document = document.removing(placements)
 
     companion object {
-        /** Adds one layer on top of the stack. */
-        fun onTop(document: Document, layer: Layer, asset: ImageAsset? = null) =
-            AddLayers(listOf(PlacedLayer(document.layers.size, layer)), listOfNotNull(asset))
+        /** Adds one layer on top of the stack inside [parentId] (the top level for null). */
+        fun onTop(document: Document, layer: Layer, asset: ImageAsset? = null, parentId: LayerId? = null) = AddLayers(
+            listOf(PlacedLayer(document.children(parentId).size, layer, parentId)),
+            listOfNotNull(asset),
+        )
+
+        /**
+         * Independent copies of the given sibling layers, stacked directly above the topmost
+         * original in the same order and shifted by [offset].
+         */
+        fun duplicates(document: Document, ids: Collection<LayerId>, offset: Vec2, newId: () -> LayerId): AddLayers {
+            val originals = placementsOf(document, ids)
+            require(originals.isNotEmpty()) { "nothing to duplicate" }
+            val parent = originals.first().parentId
+            require(originals.all { it.parentId == parent }) { "duplicated layers must share a parent" }
+            val top = originals.last().index
+            val copies = originals.mapIndexed { i, p ->
+                val copy = Grouping.copy(p.layer, newId)
+                PlacedLayer(top + 1 + i, copy.withTransform(copy.transform.translatedBy(offset)), parent)
+            }
+            return AddLayers(copies, verb = "Duplicate")
+        }
     }
 }
 
-/** Removes layers; undo puts each back at its original index. */
+/** Removes layers; undo puts each back at its original place. */
 data class RemoveLayers(val removed: List<PlacedLayer>) : Command {
     init {
         require(removed.isNotEmpty()) { "nothing to remove" }
-        // Ascending order makes revert's in-order inserts land on the original indices.
-        require(removed.zipWithNext().all { (a, b) -> a.index < b.index }) { "indices must ascend" }
+        requireAscending(removed)
     }
 
     override val label get() = if (removed.size == 1) "Delete layer" else "Delete ${removed.size} layers"
 
-    override fun apply(document: Document): Document =
-        removed.fold(document) { doc, p -> doc.withLayerRemoved(p.layer.id) }
+    override fun apply(document: Document): Document = document.removing(removed)
 
-    override fun revert(document: Document): Document =
-        removed.fold(document) { doc, p -> doc.withLayerInserted(p.index, p.layer) }
+    override fun revert(document: Document): Document = document.inserting(removed)
 
     companion object {
         fun of(document: Document, ids: Collection<LayerId>): RemoveLayers {
             require(ids.isNotEmpty()) { "nothing to remove" }
-            val placed = ids.toSet().map { PlacedLayer(document.indexOf(it), document.requireLayer(it)) }
-            return RemoveLayers(placed.sortedBy { it.index })
+            return RemoveLayers(placementsOf(document, ids))
         }
+    }
+}
+
+/**
+ * Swaps one set of layers for another in a single step: grouping (layers out, a group in),
+ * ungrouping (a group out, its children in). [removed] holds original places; [added]
+ * holds places in the document after the removal.
+ */
+data class ReplaceLayers(
+    val removed: List<PlacedLayer>,
+    val added: List<PlacedLayer>,
+    override val label: String,
+) : Command {
+    init {
+        require(removed.isNotEmpty() && added.isNotEmpty()) { "nothing to replace" }
+        requireAscending(removed)
+        requireAscending(added)
+    }
+
+    override fun apply(document: Document): Document = document.removing(removed).inserting(added)
+
+    override fun revert(document: Document): Document = document.removing(added).inserting(removed)
+
+    companion object {
+        /**
+         * Groups sibling layers. The group takes the place of the topmost one, centered on
+         * [center] (in the siblings' coordinates), and nothing moves on the canvas.
+         */
+        fun group(document: Document, ids: Collection<LayerId>, groupId: LayerId, name: String, center: Vec2): ReplaceLayers {
+            val members = placementsOf(document, ids)
+            require(members.isNotEmpty()) { "nothing to group" }
+            val parent = members.first().parentId
+            require(members.all { it.parentId == parent }) { "grouped layers must share a parent" }
+            val group = Grouping.group(groupId, name, members.map { it.layer }, center)
+            // After the members are removed, the topmost one's slot has shifted down by the others below it.
+            val index = members.last().index - (members.size - 1)
+            return ReplaceLayers(members, listOf(PlacedLayer(index, group, parent)), "Group ${countLabel(members.size)}")
+        }
+
+        /** Dissolves a group, leaving its children in its place, looking the same. */
+        fun ungroup(document: Document, groupId: LayerId): ReplaceLayers {
+            val placed = PlacedLayer.of(document, groupId)
+            val group = placed.layer as? GroupLayer ?: throw IllegalArgumentException("$groupId is not a group")
+            require(group.children.isNotEmpty()) { "group is empty" }
+            val children = Grouping.ungroup(group).mapIndexed { i, child -> PlacedLayer(placed.index + i, child, placed.parentId) }
+            return ReplaceLayers(listOf(placed), children, "Ungroup")
+        }
+
+        private fun countLabel(count: Int) = if (count == 1) "layer" else "$count layers"
     }
 }
 
@@ -82,7 +175,7 @@ data class MoveLayer(
         fun of(document: Document, id: LayerId, toIndex: Int): MoveLayer {
             val from = document.indexOf(id)
             require(from >= 0) { "no layer $id" }
-            require(toIndex in document.layers.indices) { "index $toIndex out of range" }
+            require(toIndex in document.children(document.parentOf(id)).indices) { "index $toIndex out of range" }
             return MoveLayer(id, from, toIndex)
         }
     }
