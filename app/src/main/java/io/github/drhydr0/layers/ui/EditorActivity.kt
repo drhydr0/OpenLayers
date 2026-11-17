@@ -109,7 +109,7 @@ class EditorActivity : Activity() {
                 result.onSuccess { manifest ->
                     AppLog.i(TAG, "Opened project $projectId with ${manifest.document.layers.size} layers")
                     findViewById<TextView>(R.id.editor_title).text = manifest.info.name
-                    val history = History(manifest.document)
+                    val history = History(manifest.document, manifest.history)
                     session = EditorSession(manifest.info, history, newSaveQueue(), System::currentTimeMillis)
                     val thumbnails = newThumbnailQueue()
                     if (!app.projects.thumbnailFile(projectId).exists()) thumbnails.submit(0, manifest)

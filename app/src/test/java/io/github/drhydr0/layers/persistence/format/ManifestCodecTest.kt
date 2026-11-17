@@ -12,6 +12,13 @@ import io.github.drhydr0.layers.document.TextLayer
 import io.github.drhydr0.layers.document.TextStyle
 import io.github.drhydr0.layers.document.Transform
 import io.github.drhydr0.layers.document.Vec2
+import io.github.drhydr0.layers.history.AddLayers
+import io.github.drhydr0.layers.history.MoveLayer
+import io.github.drhydr0.layers.history.PlacedLayer
+import io.github.drhydr0.layers.history.RemoveLayers
+import io.github.drhydr0.layers.history.SavedHistory
+import io.github.drhydr0.layers.history.TransformLayers
+import io.github.drhydr0.layers.history.UpdateLayer
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
@@ -54,7 +61,7 @@ class ManifestCodecTest {
 
     @Test
     fun encodedFileIsVersioned() {
-        assertTrue(ManifestCodec.encode(manifest).contains("\"formatVersion\": 1"))
+        assertTrue(ManifestCodec.encode(manifest).contains("\"formatVersion\": 2"))
     }
 
     @Test
@@ -94,6 +101,41 @@ class ManifestCodecTest {
         assertEquals(Transform(Vec2(4.0, 5.0)), text.transform)
         assertEquals(TextStyle(30.0, Color.BLACK, TextAlignment.END), text.style)
         assertTrue(text.visible)
+        // Version 1 had no saved history.
+        assertEquals(SavedHistory.EMPTY, read.history)
+    }
+
+    @Test
+    fun roundTripPreservesHistory() {
+        val doc = manifest.document
+        val text = doc.requireLayer(LayerId("txt-1")) as TextLayer
+        val moved = Transform(Vec2(1.5, -2.5), 2.0, 3.0, 45.0, flipY = true)
+        val history = SavedHistory(
+            undo = listOf(
+                AddLayers(listOf(PlacedLayer(0, doc.layers[0]), PlacedLayer(2, doc.layers[2])), listOf(assetA, assetB)),
+                TransformLayers.of(doc, mapOf(LayerId("img-1") to moved, LayerId("img-2") to moved), "Move"),
+                UpdateLayer.editText(doc, text.copy(text = "New words")),
+                MoveLayer.of(doc, LayerId("img-1"), 2),
+            ),
+            redo = listOf(
+                RemoveLayers.of(doc, listOf(LayerId("txt-1"), LayerId("img-2"))),
+                UpdateLayer.rename(doc, LayerId("img-1"), "Renamed"),
+            ),
+        )
+        val withHistory = manifest.copy(history = history)
+        val read = ManifestCodec.decode(ManifestCodec.encode(withHistory))
+        assertEquals(withHistory, read)
+        // Restored commands still work: undo the last step and redo the next one.
+        assertEquals("Reorder layer", read.history.undo.last().label)
+        assertEquals("Move 2 layers", read.history.undo[1].label)
+    }
+
+    @Test
+    fun damagedHistoryFailsClearly() {
+        val encoded = ManifestCodec.encode(manifest)
+        val broken = encoded.replace("\"undo\": []", "\"undo\": [ { \"type\": \"teleport\" } ]")
+        assertTrue("test must change the file", broken != encoded)
+        assertFails("damaged", broken)
     }
 
     @Test
@@ -104,7 +146,7 @@ class ManifestCodecTest {
 
     @Test
     fun rejectsNewerFormat() {
-        val newer = ManifestCodec.encode(manifest).replace("\"formatVersion\": 1", "\"formatVersion\": 2")
+        val newer = ManifestCodec.encode(manifest).replace("\"formatVersion\": 2", "\"formatVersion\": 3")
         assertFails("newer version", newer)
     }
 
@@ -112,7 +154,7 @@ class ManifestCodecTest {
     fun rejectsBrokenFiles() {
         assertFails("not valid JSON", "{ truncated")
         assertFails("no format version", "{}")
-        assertFails("damaged", """{ "formatVersion": 1 }""")
+        assertFails("damaged", """{ "formatVersion": 2 }""")
         // A layer pointing at an asset that isn't listed.
         val missingAsset = ManifestCodec.encode(manifest).replace("\"assetId\": \"${"b".repeat(64)}\"", "\"assetId\": \"${"d".repeat(64)}\"")
         assertFails("inconsistent", missingAsset)

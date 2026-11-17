@@ -14,16 +14,16 @@ data class PlacedLayer(val index: Int, val layer: Layer)
  * Inserts layers, plus any new assets they need. [placements] give final indices in
  * ascending order, so inserting them in order reproduces the intended stack.
  */
-class AddLayers(
-    private val placements: List<PlacedLayer>,
-    private val assets: List<ImageAsset> = emptyList(),
+data class AddLayers(
+    val placements: List<PlacedLayer>,
+    val assets: List<ImageAsset> = emptyList(),
 ) : Command {
     init {
         require(placements.isNotEmpty()) { "nothing to add" }
         require(placements.zipWithNext().all { (a, b) -> a.index < b.index }) { "indices must ascend" }
     }
 
-    override val label = if (placements.size == 1) "Add layer" else "Add ${placements.size} layers"
+    override val label get() = if (placements.size == 1) "Add layer" else "Add ${placements.size} layers"
 
     override fun apply(document: Document): Document {
         // Assets stay after undo: they are immutable, and redo or history may need them again.
@@ -42,9 +42,14 @@ class AddLayers(
 }
 
 /** Removes layers; undo puts each back at its original index. */
-class RemoveLayers private constructor(private val removed: List<PlacedLayer>) : Command {
+data class RemoveLayers(val removed: List<PlacedLayer>) : Command {
+    init {
+        require(removed.isNotEmpty()) { "nothing to remove" }
+        // Ascending order makes revert's in-order inserts land on the original indices.
+        require(removed.zipWithNext().all { (a, b) -> a.index < b.index }) { "indices must ascend" }
+    }
 
-    override val label = if (removed.size == 1) "Delete layer" else "Delete ${removed.size} layers"
+    override val label get() = if (removed.size == 1) "Delete layer" else "Delete ${removed.size} layers"
 
     override fun apply(document: Document): Document =
         removed.fold(document) { doc, p -> doc.withLayerRemoved(p.layer.id) }
@@ -56,19 +61,18 @@ class RemoveLayers private constructor(private val removed: List<PlacedLayer>) :
         fun of(document: Document, ids: Collection<LayerId>): RemoveLayers {
             require(ids.isNotEmpty()) { "nothing to remove" }
             val placed = ids.toSet().map { PlacedLayer(document.indexOf(it), document.requireLayer(it)) }
-            // Ascending order makes revert's in-order inserts land on the original indices.
             return RemoveLayers(placed.sortedBy { it.index })
         }
     }
 }
 
 /** Changes one layer's position in the stack. */
-class MoveLayer private constructor(
-    private val id: LayerId,
-    private val from: Int,
-    private val to: Int,
+data class MoveLayer(
+    val id: LayerId,
+    val from: Int,
+    val to: Int,
 ) : Command {
-    override val label = "Reorder layer"
+    override val label get() = "Reorder layer"
     override val isNoOp get() = from == to
 
     override fun apply(document: Document) = document.withLayerMoved(id, to)
@@ -85,11 +89,15 @@ class MoveLayer private constructor(
 }
 
 /** Sets transforms on one or more layers: one undo step for a whole gesture. */
-class TransformLayers private constructor(
-    private val before: Map<LayerId, Transform>,
-    private val after: Map<LayerId, Transform>,
+data class TransformLayers(
+    val before: Map<LayerId, Transform>,
+    val after: Map<LayerId, Transform>,
     override val label: String,
 ) : Command {
+    init {
+        require(before.keys == after.keys) { "before and after must cover the same layers" }
+    }
+
     override val isNoOp get() = before == after
 
     override fun apply(document: Document) = set(document, after)
@@ -111,9 +119,9 @@ class TransformLayers private constructor(
 }
 
 /** Replaces a layer's properties (text, style, name, ...) while keeping its identity and place. */
-class UpdateLayer private constructor(
-    private val before: Layer,
-    private val after: Layer,
+data class UpdateLayer(
+    val before: Layer,
+    val after: Layer,
     override val label: String,
 ) : Command {
     init {

@@ -18,7 +18,49 @@ internal data class ManifestDto(
     val assets: List<AssetDto> = emptyList(),
     /** Bottom of the stack first. */
     val layers: List<LayerDto> = emptyList(),
+    /** Since format 2. Saved in the same file so document and history can't disagree. */
+    val history: HistoryDto = HistoryDto(),
 )
+
+@Serializable
+internal data class HistoryDto(
+    /** Stack order: the last entry is undone next. */
+    val undo: List<CommandDto> = emptyList(),
+    /** Stack order: the last entry is redone next. */
+    val redo: List<CommandDto> = emptyList(),
+)
+
+@Serializable
+internal data class PlacedLayerDto(val index: Int, val layer: LayerDto)
+
+@Serializable
+internal data class TransformChangeDto(val id: String, val before: TransformDto, val after: TransformDto)
+
+@Serializable
+internal sealed interface CommandDto
+
+@Serializable
+@SerialName("add")
+internal data class AddLayersDto(
+    val placements: List<PlacedLayerDto>,
+    val assets: List<AssetDto> = emptyList(),
+) : CommandDto
+
+@Serializable
+@SerialName("remove")
+internal data class RemoveLayersDto(val removed: List<PlacedLayerDto>) : CommandDto
+
+@Serializable
+@SerialName("move")
+internal data class MoveLayerDto(val id: String, val from: Int, val to: Int) : CommandDto
+
+@Serializable
+@SerialName("transform")
+internal data class TransformLayersDto(val label: String, val changes: List<TransformChangeDto>) : CommandDto
+
+@Serializable
+@SerialName("update")
+internal data class UpdateLayerDto(val label: String, val before: LayerDto, val after: LayerDto) : CommandDto
 
 @Serializable
 internal data class ProjectDto(

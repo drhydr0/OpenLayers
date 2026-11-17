@@ -30,6 +30,7 @@ class EditorSession(
 
     private fun save() {
         info = info.copy(modifiedAtMillis = clock())
-        saveQueue.submit(history.version, ProjectManifest(info, history.document))
+        // Document and history go into one file, so they can't disagree after a crash.
+        saveQueue.submit(history.version, ProjectManifest(info, history.document, history.snapshot()))
     }
 }
