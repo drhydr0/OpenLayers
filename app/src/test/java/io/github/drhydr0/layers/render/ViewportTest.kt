@@ -31,3 +31,31 @@ class ViewportTest {
         assertVec(view.center, m.map(Vec2(540.0, 675.0)))
     }
 }
+
+class ViewportNavigationTest {
+
+    private val fit = Viewport.fit(1000, 1000, Rect(0.0, 0.0, 500.0, 500.0), margin = 0.0) // scale 0.5
+
+    @Test
+    fun zoomKeepsFocusPointStill() {
+        val focus = Vec2(100.0, 300.0)
+        val canvasPoint = fit.inverted()!!.map(focus)
+        val zoomed = Viewport.zoom(fit, focus, 3.0, fitScale = 0.5)
+        assertVec(focus, zoomed.map(canvasPoint))
+        org.junit.Assert.assertEquals(1.5, Viewport.scaleOf(zoomed), 1e-9)
+    }
+
+    @Test
+    fun zoomIsClampedRelativeToFit() {
+        val inMax = Viewport.zoom(fit, Vec2(0.0, 0.0), 1000.0, fitScale = 0.5)
+        org.junit.Assert.assertEquals(0.5 * Viewport.MAX_ZOOM, Viewport.scaleOf(inMax), 1e-9)
+        val outMax = Viewport.zoom(fit, Vec2(0.0, 0.0), 0.0001, fitScale = 0.5)
+        org.junit.Assert.assertEquals(0.5 * Viewport.MIN_ZOOM, Viewport.scaleOf(outMax), 1e-9)
+    }
+
+    @Test
+    fun panShiftsEverythingOnScreen() {
+        val panned = Viewport.pan(fit, 30.0, -20.0)
+        assertVec(Vec2(30.0, -20.0), panned.map(Vec2(0.0, 0.0)))
+    }
+}

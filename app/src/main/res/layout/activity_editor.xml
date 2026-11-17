@@ -30,6 +30,22 @@
             android:textAppearance="?android:attr/textAppearanceMedium" />
 
         <ImageButton
+            android:id="@+id/editor_navigate"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="@drawable/toggle_background"
+            android:contentDescription="@string/editor_navigate_off"
+            android:src="@drawable/ic_pan" />
+
+        <ImageButton
+            android:id="@+id/editor_fit"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/editor_fit"
+            android:src="@drawable/ic_fit_screen" />
+
+        <ImageButton
             android:id="@+id/editor_undo"
             android:layout_width="48dp"
             android:layout_height="48dp"

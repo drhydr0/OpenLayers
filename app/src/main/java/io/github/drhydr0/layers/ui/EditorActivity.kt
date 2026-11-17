@@ -63,6 +63,7 @@ class EditorActivity : Activity() {
         redoButton = findViewById<ImageButton>(R.id.editor_redo).apply { setOnClickListener { session?.history?.redo() } }
         setUpTouch()
         setUpLayersPanel()
+        setUpNavigation()
 
         projectId = intent.getStringExtra(EXTRA_PROJECT_ID) ?: run {
             finish()
@@ -135,6 +136,18 @@ class EditorActivity : Activity() {
         canvasView.setOnTouchListener(touch)
         // Draws against what's on screen, so handles follow a gesture preview.
         canvasView.overlay = { c -> canvasView.document?.let { touch.overlay.draw(c, it) } }
+    }
+
+    private fun setUpNavigation() {
+        val toggle = findViewById<ImageButton>(R.id.editor_navigate)
+        toggle.setOnClickListener {
+            touch.navigationMode = !touch.navigationMode
+            toggle.isActivated = touch.navigationMode
+            toggle.contentDescription = getString(
+                if (touch.navigationMode) R.string.editor_navigate_on else R.string.editor_navigate_off,
+            )
+        }
+        findViewById<ImageButton>(R.id.editor_fit).setOnClickListener { canvasView.fitToScreen() }
     }
 
     private fun setUpLayersPanel() {

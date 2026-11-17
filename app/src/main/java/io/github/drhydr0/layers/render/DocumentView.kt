@@ -41,6 +41,13 @@ class DocumentView @JvmOverloads constructor(
     var viewMatrix: Matrix = Matrix.IDENTITY
         private set
 
+    /** Scale of the fitted view, the reference for zoom limits. */
+    var fitScale: Double = 1.0
+        private set
+
+    // After the user pans or zooms, layout changes keep their view instead of refitting.
+    private var userAdjusted = false
+
     /** Extra drawing on top of the document in view coordinates, e.g. selection handles. */
     var overlay: ((Canvas) -> Unit)? = null
 
@@ -75,12 +82,34 @@ class DocumentView @JvmOverloads constructor(
             Rect(0.0, 0.0, width.toDouble(), height.toDouble()),
             margin = (MARGIN_DP * density).toDouble(),
         )
+        fitScale = Viewport.scaleOf(viewMatrix)
+        userAdjusted = false
+        invalidate()
+    }
+
+    /** Sets a panned or zoomed view. Navigation only: document positions never change. */
+    fun setUserView(matrix: Matrix) {
+        viewMatrix = matrix
+        userAdjusted = true
         invalidate()
     }
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
-        fitToScreen()
+        if (!userAdjusted || oldw == 0 || oldh == 0) {
+            fitToScreen()
+        } else {
+            // Keep what was centered still centered, e.g. when the layers panel opens.
+            viewMatrix = Viewport.pan(viewMatrix, (w - oldw) / 2.0, (h - oldh) / 2.0)
+            refreshFitScale()
+        }
+    }
+
+    private fun refreshFitScale() {
+        val doc = document ?: return
+        fitScale = Viewport.scaleOf(
+            Viewport.fit(doc.canvas.width, doc.canvas.height, Rect(0.0, 0.0, width.toDouble(), height.toDouble()), (MARGIN_DP * density).toDouble()),
+        )
     }
 
     override fun onDraw(canvas: Canvas) {
