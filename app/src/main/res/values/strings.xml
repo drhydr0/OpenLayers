@@ -334,5 +334,11 @@
     <string name="checkpoint_save">Save</string>
     <string name="checkpoint_saved">Checkpoint saved to your project list</string>
     <string name="checkpoint_failed">Could not save the checkpoint.</string>
+    <string name="diagnostics_stress">Make test project</string>
+    <string name="diagnostics_stress_description">Create a large test project with 300 layers and 1,000 undo steps</string>
+    <string name="diagnostics_stress_name">Large test project</string>
+    <!-- %1$d = milliseconds -->
+    <string name="diagnostics_stress_done">Large test project created in %1$d ms. Open it from the project list.</string>
+    <string name="diagnostics_stress_failed">Could not create the test project.</string>
     <string name="editor_open_failed">Could not open the project.</string>
 </resources>

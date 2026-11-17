@@ -6,7 +6,7 @@ Instructions for Claude Code working in this repository. Read this first in ever
 
 A native Android image editor built around editable layers, text, reusable stickers, and direct touch manipulation. The full product and architecture spec is `docs/image_editor_high_level_design.md`. When this file and the design doc disagree, ask before acting. Do not resolve the conflict silently.
 
-**Current milestone:** Polished workflow. Milestones 5 and 6 are built and waiting on their phone tests: `docs/milestone_5_phone_test.md` and `docs/milestone_6_phone_test.md`. Plans: `docs/milestone_5_selection_tools_plan.md`, `docs/milestone_6_polished_workflow_plan.md`. Update this line when a milestone's gate is met.
+**Current milestone:** Capacity verification. Milestones 5, 6, and 7 are built and waiting on their phone tests: `docs/milestone_5_phone_test.md`, `docs/milestone_6_phone_test.md`, `docs/milestone_7_phone_test.md`. Plans are beside them in `docs/`. Update this line when a milestone's gate is met.
 
 ## How this project is developed
 
@@ -27,6 +27,7 @@ Run from the repository root with the Gradle wrapper. Never use a system `gradle
 | Debug APK | `./gradlew assembleDebug` |
 | Full pre-push check | `./gradlew testDebugUnitTest lintDebug assembleDebug && scripts/check-apk-abis.sh app/build/outputs/apk/debug/app-debug.apk` |
 | Single test class | `./gradlew testDebugUnitTest --tests "<fully.qualified.ClassName>"` |
+| Compile on-device tests | `./gradlew assembleDebugAndroidTest` |
 
 Before pushing, run the full pre-push check and make sure it passes. If a clean build exceeds the foreground command limit, run it in the background and check on it. Don't skip it.
 
@@ -75,6 +76,7 @@ Rules:
 ## CI, releases, and signing
 
 - `.github/workflows/pr.yml` runs unit tests, lint, and `assembleDebug` on pull requests, and uploads the APK as an artifact.
+- The same workflow's `device-tests` job runs the on-device tests in `app/src/androidTest` on an emulator. They can't run in the cloud session: compile them here, and read the CI result.
 - `.github/workflows/main.yml` builds on pushes to `main` and replaces the APK on the `dev` pre-release.
 - Builds are signed with one stable key held in GitHub Actions secrets. **Never** generate a new keystore, commit a keystore or passwords, or change signing config without explicit approval. A changed signature forces an uninstall and wipes the developer's projects.
 - Never change `applicationId`, for the same reason.

@@ -45,6 +45,8 @@ android {
         versionCode = versionCodeFromGit
         versionName = "0.1.0"
 
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
         buildConfigField("String", "COMMIT_HASH", "\"$commitHash\"")
     }
 
@@ -89,6 +91,9 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.androidx.recyclerview)
     testImplementation(libs.junit)
+    androidTestImplementation(libs.junit)
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.test.junit)
 }
 
 // ArchitectureTest reads source files directly, so source edits must rerun tests even
