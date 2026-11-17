@@ -32,7 +32,9 @@ Deferred, with reasons:
 
 ## Steps
 
-All 6 steps are built.
+Milestone closed on 2026-11-17 after the developer ran the phone test. All 6 steps are built.
+
+Follow-up from that test: new images, text, and stickers now appear in the middle of the current view (not the canvas), and a selected text layer shows an **Edit text** button.
 
 | # | Step | PR | Verified by |
 | --- | --- | --- | --- |

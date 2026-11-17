@@ -17,6 +17,7 @@ import io.github.drhydr0.layers.LayersApp
 import io.github.drhydr0.layers.R
 import io.github.drhydr0.layers.diagnostics.AppLog
 import io.github.drhydr0.layers.diagnostics.EditorStats
+import io.github.drhydr0.layers.document.Document
 import io.github.drhydr0.layers.document.GroupLayer
 import io.github.drhydr0.layers.document.ImageLayer
 import io.github.drhydr0.layers.document.Layer
@@ -65,6 +66,7 @@ class EditorActivity : Activity() {
     private lateinit var redoButton: ImageButton
     private lateinit var saveStatus: TextView
     private lateinit var selectionBar: View
+    private lateinit var editTextButton: Button
     private lateinit var scopeBar: View
     private lateinit var scopeName: TextView
     private lateinit var selectionCount: TextView
@@ -295,6 +297,8 @@ class EditorActivity : Activity() {
             touch.enterScope(doc.ancestors(scope)?.lastOrNull()?.id)
             touch.select(scope)
         }
+        editTextButton = findViewById(R.id.editor_edit_text)
+        editTextButton.setOnClickListener { selectedText()?.let(::editText) }
         findViewById<Button>(R.id.editor_delete_selection).setOnClickListener {
             val current = session ?: return@setOnClickListener
             // Locked layers are protected from deletion along with the rest of the selection.
@@ -415,7 +419,7 @@ class EditorActivity : Activity() {
                 val current = session ?: return@runOnUiThread
                 result.onSuccess {
                     val doc = current.document
-                    val instance = Stickers.instantiate(sticker, doc.canvas.bounds.center, LayerId::random)
+                    val instance = Stickers.instantiate(sticker, placementFrame(doc).center, LayerId::random)
                     current.commit(AddLayers.insertSticker(doc, instance, sticker.assets))
                     touch.enterScope(null)
                     touch.select(instance.id)
@@ -454,7 +458,12 @@ class EditorActivity : Activity() {
         }
     }
 
+    /** The selected layer when it is a single text layer. */
+    private fun selectedText(): TextLayer? =
+        touch.selectedIds.singleOrNull()?.let { session?.document?.layer(it) } as? TextLayer
+
     private fun refreshSelectionBar() {
+        editTextButton.visibility = if (selectedText() != null) View.VISIBLE else View.GONE
         val count = touch.selectedIds.size
         selectionBar.visibility = if (count == 0) View.GONE else View.VISIBLE
         if (count > 0) selectionCount.text = resources.getQuantityString(R.plurals.selection_count, count, count)
@@ -574,7 +583,9 @@ class EditorActivity : Activity() {
                         id = LayerId.random(),
                         name = getString(R.string.editor_default_image_name),
                         assetId = asset.id,
-                        transform = Placement.centeredFit(doc.canvas, asset.width, asset.height),
+                        transform = placementFrame(doc).let { frame ->
+                            Placement.centeredFit(frame.sizing, asset.width, asset.height).copy(position = frame.center)
+                        },
                     )
                     current.commit(AddLayers.onTop(doc, layer, asset))
                     // New content goes on the top level, so step out of any group first.
@@ -589,9 +600,14 @@ class EditorActivity : Activity() {
         }
     }
 
+    /** New content appears in the middle of what is on screen, not the middle of the canvas. */
+    private fun placementFrame(doc: Document) = Placement.frame(doc.canvas, canvasView.visibleCanvasRect())
+
     private fun addText() {
         val canvas = session?.document?.canvas ?: return
-        val style = TextStyle(fontSize = Placement.defaultFontSize(canvas))
+        // Sized and placed for the view as it is when Text is tapped.
+        val frame = session?.document?.let(::placementFrame) ?: return
+        val style = TextStyle(fontSize = Placement.defaultFontSize(frame.sizing))
         TextSheet.show(this, R.string.text_add_title, "", style, Placement.maxFontSize(canvas)) { text, chosen ->
             val current = session ?: return@show
             val layer = TextLayer(
@@ -599,8 +615,8 @@ class EditorActivity : Activity() {
                 name = getString(R.string.editor_default_text_name),
                 text = text,
                 style = chosen,
-                boxWidth = Placement.defaultTextBoxWidth(canvas),
-                transform = Transform(position = canvas.bounds.center),
+                boxWidth = Placement.defaultTextBoxWidth(frame.sizing),
+                transform = Transform(position = frame.center),
             )
             current.commit(AddLayers.onTop(current.document, layer))
             touch.enterScope(null)

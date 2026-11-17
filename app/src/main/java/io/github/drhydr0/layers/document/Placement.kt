@@ -31,6 +31,21 @@ object Placement {
         return Transform(position = canvas.bounds.center, scaleX = scale, scaleY = scale)
     }
 
+    /**
+     * Where new content goes: the middle of what the user is looking at, sized for that
+     * view. [visible] is the part of the canvas plane on screen (null when unknown). When
+     * zoomed in, new content lands in front of the user at a size that suits the zoom;
+     * when the whole canvas is in view, it behaves like the canvas itself.
+     */
+    fun frame(canvas: CanvasSpec, visible: Rect?): PlacementFrame {
+        if (visible == null || visible.isEmpty) return PlacementFrame(canvas.bounds.center, canvas)
+        val sizing = CanvasSpec(
+            min(canvas.width.toDouble(), visible.width).roundToInt().coerceAtLeast(1),
+            min(canvas.height.toDouble(), visible.height).roundToInt().coerceAtLeast(1),
+        )
+        return PlacementFrame(visible.center, sizing)
+    }
+
     /** New text spans most of the canvas width, so it's readable and wraps sensibly. */
     fun defaultTextBoxWidth(canvas: CanvasSpec) = canvas.width * DEFAULT_FRACTION
 
@@ -43,3 +58,6 @@ object Placement {
     const val DEFAULT_FRACTION = 0.8
     const val MIN_FONT_SIZE = 8.0
 }
+
+/** The spot for new content ([center], canvas coordinates) and the area to size it for. */
+data class PlacementFrame(val center: Vec2, val sizing: CanvasSpec)

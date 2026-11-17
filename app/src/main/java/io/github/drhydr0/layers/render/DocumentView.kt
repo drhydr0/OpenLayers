@@ -87,6 +87,12 @@ class DocumentView @JvmOverloads constructor(
         invalidate()
     }
 
+    /** The part of the canvas plane currently on screen, in canvas coordinates. */
+    fun visibleCanvasRect(): Rect? {
+        if (width == 0 || height == 0) return null
+        return viewMatrix.inverted()?.mapRect(Rect(0.0, 0.0, width.toDouble(), height.toDouble()))
+    }
+
     /** Sets a panned or zoomed view. Navigation only: document positions never change. */
     fun setUserView(matrix: Matrix) {
         viewMatrix = matrix

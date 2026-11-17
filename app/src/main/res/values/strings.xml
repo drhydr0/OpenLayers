@@ -200,5 +200,7 @@
     <string name="sticker_delete">Delete</string>
     <string name="sticker_delete_title">Delete %1$s?</string>
     <string name="sticker_delete_message">It will be removed from your collection. Stickers already placed in projects are not affected.</string>
+    <string name="selection_edit_text">Edit text</string>
+    <string name="selection_edit_text_description">Change the words, size, color, or alignment of the selected text</string>
     <string name="editor_open_failed">Could not open the project.</string>
 </resources>

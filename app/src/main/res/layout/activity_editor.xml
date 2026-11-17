@@ -168,6 +168,16 @@
             android:textAppearance="?android:attr/textAppearanceSmall" />
 
         <Button
+            android:id="@+id/editor_edit_text"
+            style="?android:attr/borderlessButtonStyle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:contentDescription="@string/selection_edit_text_description"
+            android:minHeight="48dp"
+            android:text="@string/selection_edit_text"
+            android:visibility="gone" />
+
+        <Button
             android:id="@+id/editor_selection_actions"
             style="?android:attr/borderlessButtonStyle"
             android:layout_width="wrap_content"
