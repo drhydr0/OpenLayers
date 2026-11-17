@@ -52,8 +52,12 @@ Out of scope here (later milestones): persistent undo history, autosave recovery
 | 14 | Export PNG and JPEG, dimensions, gallery, share | Phone |
 | 15 | Milestone check against the goal, docs update | Phone |
 
-## Open questions
+## Decisions (2026-11-17)
 
-1. **JSON library.** Recommendation: add `kotlinx-serialization-json` (JetBrains, pure Kotlin, works in JVM tests). Android's built-in `org.json` is not usable in JVM unit tests, and a hand-written parser is a risk for the save format.
-2. **Layers panel list.** Recommendation: add `androidx.recyclerview` when step 11 arrives. The platform `ListView` would work for a basic panel, but M3 to M4 need drag reordering and nested groups, where RecyclerView is much better.
-3. **Undo buttons now.** The in-memory undo and redo is needed anyway because every edit is a command. Recommendation: show undo and redo buttons in M2. They are cheap, and M3 then only makes history persistent.
+1. **JSON library:** add `kotlinx-serialization-json` (JetBrains, pure Kotlin, works in JVM tests). Android's built-in `org.json` is not usable in JVM unit tests, and a hand-written parser is a risk for the save format.
+2. **Layers panel list:** add `androidx.recyclerview` at step 11. M3 to M4 need drag reordering and nested groups, where RecyclerView is much better than `ListView`.
+3. **Undo and redo buttons:** shown in M2. M3 makes history persistent.
+
+## Workflow
+
+The developer wants minimal input. Claude merges its own PRs once CI passes when they need no phone test, and asks for a phone check only where it is truly needed.
