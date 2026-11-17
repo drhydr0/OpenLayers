@@ -118,5 +118,27 @@
     <string name="editor_navigate_off">Pan and zoom mode: off. Tap to move the view instead of layers.</string>
     <string name="editor_navigate_on">Pan and zoom mode: on. Tap to edit layers again.</string>
     <string name="editor_fit">Fit canvas to screen</string>
+    <string name="editor_export">Export</string>
+    <string name="export_title">Export image</string>
+    <string name="export_format_label">Format</string>
+    <string name="export_png">PNG</string>
+    <string name="export_jpeg">JPEG</string>
+    <string name="export_transparent">Transparent background</string>
+    <!-- %1$d = JPEG quality 50 to 100 -->
+    <string name="export_quality_label">Quality: %1$d</string>
+    <string name="export_quality_description">JPEG quality</string>
+    <string name="export_size_label">Size</string>
+    <!-- %1$d = percent, %2$d x %3$d = pixels -->
+    <string name="export_size_option">%1$d%% · %2$d × %3$d px</string>
+    <!-- %1$s = the size option text -->
+    <string name="export_size_too_large">%1$s (too large for this phone)</string>
+    <string name="export_note">Saved to Pictures/Layers. Share also saves a copy there.</string>
+    <string name="export_save">Save</string>
+    <string name="export_share">Share</string>
+    <string name="export_progress">Exporting…</string>
+    <string name="export_saved">Saved to Pictures/Layers</string>
+    <string name="export_failed">Export failed. Your project is unchanged.</string>
+    <string name="export_cancelled">Export cancelled</string>
+    <string name="share_image_chooser">Share image</string>
     <string name="editor_open_failed">Could not open the project.</string>
 </resources>

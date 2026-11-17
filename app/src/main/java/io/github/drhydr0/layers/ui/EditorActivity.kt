@@ -1,17 +1,20 @@
 package io.github.drhydr0.layers.ui
 
 import android.app.Activity
+import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.view.View
 import android.widget.Button
 import android.widget.ImageButton
+import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
 import io.github.drhydr0.layers.LayersApp
 import io.github.drhydr0.layers.R
 import io.github.drhydr0.layers.diagnostics.AppLog
+import io.github.drhydr0.layers.diagnostics.EditorStats
 import io.github.drhydr0.layers.document.ImageLayer
 import io.github.drhydr0.layers.document.Layer
 import io.github.drhydr0.layers.document.LayerId
@@ -27,10 +30,16 @@ import io.github.drhydr0.layers.history.UpdateLayer
 import io.github.drhydr0.layers.interaction.CanvasTouchController
 import io.github.drhydr0.layers.interaction.HitTest
 import io.github.drhydr0.layers.persistence.SaveQueue
+import io.github.drhydr0.layers.persistence.format.ProjectManifest
+import io.github.drhydr0.layers.platform.GalleryWriter
 import io.github.drhydr0.layers.platform.ImageImporter
 import io.github.drhydr0.layers.platform.ImagePicker
 import io.github.drhydr0.layers.render.DocumentView
+import io.github.drhydr0.layers.render.ExportOptions
+import io.github.drhydr0.layers.render.Exporter
 import io.github.drhydr0.layers.render.PreviewImages
+import io.github.drhydr0.layers.render.ThumbnailRenderer
+import java.util.concurrent.CancellationException
 
 /** The editor for one project: canvas, tools, and saving after every change. */
 class EditorActivity : Activity() {
@@ -64,6 +73,10 @@ class EditorActivity : Activity() {
         setUpTouch()
         setUpLayersPanel()
         setUpNavigation()
+        findViewById<ImageButton>(R.id.editor_export).setOnClickListener {
+            val doc = session?.document ?: return@setOnClickListener
+            ExportSheet.show(this, doc.canvas, ::runExport)
+        }
 
         projectId = intent.getStringExtra(EXTRA_PROJECT_ID) ?: run {
             finish()
@@ -98,6 +111,13 @@ class EditorActivity : Activity() {
                     findViewById<TextView>(R.id.editor_title).text = manifest.info.name
                     val history = History(manifest.document)
                     session = EditorSession(manifest.info, history, newSaveQueue(), System::currentTimeMillis)
+                    val thumbnails = newThumbnailQueue()
+                    if (!app.projects.thumbnailFile(projectId).exists()) thumbnails.submit(0, manifest)
+                    history.addListener {
+                        session?.let { s -> thumbnails.submit(it.version, ProjectManifest(s.info, it.document)) }
+                        EditorStats.latest = EditorStats.Snapshot(it.document.layers.size, it.size)
+                    }
+                    EditorStats.latest = EditorStats.Snapshot(history.document.layers.size, history.size)
                     history.addListener {
                         canvasView.document = it.document
                         touch.documentChanged(it.document)
@@ -136,6 +156,52 @@ class EditorActivity : Activity() {
         canvasView.setOnTouchListener(touch)
         // Draws against what's on screen, so handles follow a gesture preview.
         canvasView.overlay = { c -> canvasView.document?.let { touch.overlay.draw(c, it) } }
+    }
+
+    /** Exports a snapshot taken now, so edits made while it runs don't change the output. */
+    private fun runExport(options: ExportOptions, action: ExportSheet.Action) {
+        val current = session ?: return
+        val snapshot = current.document
+        val name = GalleryWriter.displayName(current.info.name, options.format.extension, System.currentTimeMillis())
+        val exporter = Exporter { app.projects.assets(projectId).file(it) }
+        val progress = AlertDialog.Builder(this)
+            .setTitle(R.string.export_progress)
+            .setView(ProgressBar(this).apply { isIndeterminate = true; setPadding(0, PROGRESS_PADDING, 0, PROGRESS_PADDING) })
+            .setCancelable(false)
+            .setNegativeButton(android.R.string.cancel) { _, _ -> exporter.cancelled = true }
+            .show()
+        AppLog.i(TAG, "Export ${options.format} x${options.scale} of ${snapshot.layers.size} layers")
+        app.decode.execute {
+            val result = runCatching {
+                GalleryWriter.save(contentResolver, name, options.format.mimeType) { exporter.export(snapshot, options, it) }
+            }
+            runOnUiThread {
+                if (isDestroyed) return@runOnUiThread
+                if (progress.isShowing) progress.dismiss()
+                result.onSuccess { uri ->
+                    AppLog.i(TAG, "Export finished")
+                    when (action) {
+                        ExportSheet.Action.SAVE -> Toast.makeText(this, R.string.export_saved, Toast.LENGTH_SHORT).show()
+                        ExportSheet.Action.SHARE -> shareImage(uri, options.format.mimeType)
+                    }
+                }.onFailure {
+                    val cancelled = it is CancellationException
+                    if (cancelled) AppLog.i(TAG, "Export cancelled") else AppLog.e(TAG, "Export failed", it)
+                    Toast.makeText(
+                        this, if (cancelled) R.string.export_cancelled else R.string.export_failed, Toast.LENGTH_LONG,
+                    ).show()
+                }
+            }
+        }
+    }
+
+    private fun shareImage(uri: android.net.Uri, mimeType: String) {
+        val send = Intent(Intent.ACTION_SEND).apply {
+            type = mimeType
+            putExtra(Intent.EXTRA_STREAM, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        startActivity(Intent.createChooser(send, getString(R.string.share_image_chooser)))
     }
 
     private fun setUpNavigation() {
@@ -208,6 +274,16 @@ class EditorActivity : Activity() {
         redoButton.alpha = if (history.canRedo) 1f else DISABLED_ALPHA
         redoButton.contentDescription = history.redoLabel
             ?.let { getString(R.string.editor_redo_action, it) } ?: getString(R.string.editor_redo)
+    }
+
+    /** Re-renders the project-list thumbnail after edits, newest version only. */
+    private fun newThumbnailQueue(): SaveQueue {
+        val renderer = ThumbnailRenderer({ app.projects.assets(projectId).file(it) })
+        return SaveQueue(
+            executor = app.thumbnails,
+            save = { m -> app.projects.writeThumbnail(m.info.id) { renderer.writePng(m.document, it) } },
+            onResult = { version, error -> if (error != null) AppLog.w(TAG, "Thumbnail $version failed", error) },
+        )
     }
 
     private fun newSaveQueue() = SaveQueue(
@@ -284,6 +360,7 @@ class EditorActivity : Activity() {
         private const val EXTRA_PROJECT_ID = "project_id"
         private const val REQUEST_ADD_IMAGE = 1
         private const val DISABLED_ALPHA = 0.38f
+        private const val PROGRESS_PADDING = 48
 
         fun intent(context: Context, projectId: String) =
             Intent(context, EditorActivity::class.java).putExtra(EXTRA_PROJECT_ID, projectId)

@@ -32,28 +32,41 @@ Out of scope here (later milestones): persistent undo history, autosave recovery
 - **Threads.** Decoding, import, save, thumbnails, and export run on background executors. Results carry the document version, and stale results are dropped.
 - **Export sharing.** Saving to the gallery uses `MediaStore` (no permission needed). Sharing uses the saved gallery item's URI, so no `FileProvider` is needed.
 
-## Steps (one PR each)
+## Steps
 
-| # | Step | Verified by |
-| --- | --- | --- |
-| 1 | Close Build foundation, add this plan | Review |
-| 2 | Geometry types, transforms, layer and document model | JVM tests |
-| 3 | History engine and core commands, undo and redo incl. multilayer | JVM tests |
-| 4 | Manifest format v1: serialize, parse, version check | JVM round-trip tests |
-| 5 | Project storage: project folders, asset store, atomic save, interrupted-write recovery | JVM tests |
-| 6 | Project screen: list, create, rename, delete, open (replaces start screen; debug keeps commit hash) | Phone |
-| 7 | Renderer and canvas view: background, images, text, fit to screen | Phone |
-| 8 | Image import from photo picker; "open image as canvas" | Phone |
-| 9 | Text layers: add and edit content, size, color, alignment, width | Phone |
-| 10 | Selection and touch transforms with handles, one command per gesture, undo and redo buttons | JVM tests for math, phone |
-| 11 | Layers panel: select, reorder, delete, rename | Phone |
-| 12 | Canvas navigation: pan and zoom mode, fit, reset | Phone |
-| 13 | Save after each edit, reopen, diagnostics counts | JVM tests, phone |
-| 14 | Export PNG and JPEG, dimensions, gallery, share | Phone |
-| 15 | Milestone check against the goal, docs update | Phone |
+All 15 steps are built. Related steps were combined into one PR where that saved a round of CI.
 
-## Open questions
+| # | Step | PR | Verified by |
+| --- | --- | --- | --- |
+| 1 | Close Build foundation, add this plan | #6 | Review |
+| 2 | Geometry types, transforms, layer and document model | #7 | JVM tests |
+| 3 | History engine and core commands, undo and redo incl. multilayer | #8 | JVM tests |
+| 4 | Manifest format v1: serialize, parse, version check | #9 | JVM tests |
+| 5 | Project storage: folders, asset store, atomic save, interrupted-write recovery | #11 | JVM tests |
+| 6 | Project screen: list, create, rename, delete, open | #12 | Phone test |
+| 7 | Renderer and canvas view | #12 | Phone test |
+| 8 | Image import, "open image as canvas", save after every edit | #13 | JVM tests, phone test |
+| 9 | Text layers | #14 | Phone test |
+| 10 | Selection and touch transforms, undo and redo buttons | #14 | JVM tests, phone test |
+| 11 | Layers panel | #15 | Phone test |
+| 12 | Canvas navigation | #15 | JVM tests, phone test |
+| 13 | Thumbnails, diagnostics counts (saving moved to step 8) | final PR | JVM tests, phone test |
+| 14 | Export PNG and JPEG, gallery, share | final PR | JVM tests, phone test |
+| 15 | Docs and the combined phone test | final PR | Phone test |
 
-1. **JSON library.** Recommendation: add `kotlinx-serialization-json` (JetBrains, pure Kotlin, works in JVM tests). Android's built-in `org.json` is not usable in JVM unit tests, and a hand-written parser is a risk for the save format.
-2. **Layers panel list.** Recommendation: add `androidx.recyclerview` when step 11 arrives. The platform `ListView` would work for a basic panel, but M3 to M4 need drag reordering and nested groups, where RecyclerView is much better.
-3. **Undo buttons now.** The in-memory undo and redo is needed anyway because every edit is a command. Recommendation: show undo and redo buttons in M2. They are cheap, and M3 then only makes history persistent.
+Changes from the original plan:
+
+- Saving after every edit moved from step 13 to step 8, so nothing added from step 8 on is ever unsaved.
+- Project-list thumbnails were added in step 13; the design doc asks for them, and they reuse the renderer.
+- #10 added a CI check that every APK runs on 64-bit-only phones (no native code today).
+- Rendering, gestures, and export pixels have no automated tests yet. Emulator tests are planned for M7, so the phone test in `milestone_2_phone_test.md` covers them for now.
+
+## Decisions (2026-11-17)
+
+1. **JSON library:** add `kotlinx-serialization-json` (JetBrains, pure Kotlin, works in JVM tests). Android's built-in `org.json` is not usable in JVM unit tests, and a hand-written parser is a risk for the save format.
+2. **Layers panel list:** add `androidx.recyclerview` at step 11. M3 to M4 need drag reordering and nested groups, where RecyclerView is much better than `ListView`.
+3. **Undo and redo buttons:** shown in M2. M3 makes history persistent.
+
+## Workflow
+
+The developer wants minimal input. Claude merges its own PRs once CI passes when they need no phone test, and asks for a phone check only where it is truly needed.

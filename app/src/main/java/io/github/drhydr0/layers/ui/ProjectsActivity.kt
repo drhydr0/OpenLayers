@@ -6,6 +6,8 @@ package io.github.drhydr0.layers.ui
 import android.app.Activity
 import android.app.AlertDialog
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Bundle
 import android.view.View
@@ -88,9 +90,10 @@ class ProjectsActivity : Activity() {
     private fun refresh() {
         app.io.execute {
             val list = app.projects.list()
+            val thumbnails = list.projects.mapNotNull { info -> loadThumbnail(info.id)?.let { info.id to it } }.toMap()
             runOnUiThread {
                 if (isDestroyed) return@runOnUiThread
-                adapter.submit(list.projects)
+                adapter.submit(list.projects, thumbnails)
                 emptyView.visibility = if (list.projects.isEmpty()) View.VISIBLE else View.GONE
                 damagedView.visibility = if (list.unreadableIds.isEmpty()) View.GONE else View.VISIBLE
                 damagedView.text = resources.getQuantityString(
@@ -101,6 +104,14 @@ class ProjectsActivity : Activity() {
                 }
             }
         }
+    }
+
+    /** Half-size decode: row thumbnails are 56 dp, so full 384 px PNGs would waste memory. */
+    private fun loadThumbnail(id: String): Bitmap? {
+        val file = app.projects.thumbnailFile(id)
+        if (!file.isFile) return null
+        val options = BitmapFactory.Options().apply { inSampleSize = 2 }
+        return BitmapFactory.decodeFile(file.path, options)
     }
 
     private fun createProject(name: String, canvas: CanvasSpec) {
