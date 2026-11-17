@@ -7,6 +7,8 @@ import io.github.drhydr0.layers.document.Document
 import io.github.drhydr0.layers.document.ImageAsset
 import io.github.drhydr0.layers.document.ImageLayer
 import io.github.drhydr0.layers.document.LayerId
+import io.github.drhydr0.layers.document.ShapeKind
+import io.github.drhydr0.layers.document.ShapeLayer
 import io.github.drhydr0.layers.document.TextAlignment
 import io.github.drhydr0.layers.document.TextLayer
 import io.github.drhydr0.layers.document.TextStyle
@@ -64,7 +66,7 @@ class ManifestCodecTest {
 
     @Test
     fun encodedFileIsVersioned() {
-        assertTrue(ManifestCodec.encode(manifest).contains("\"formatVersion\": 3"))
+        assertTrue(ManifestCodec.encode(manifest).contains("\"formatVersion\": 4"))
     }
 
     @Test
@@ -189,6 +191,26 @@ class ManifestCodecTest {
     }
 
     @Test
+    fun roundTripPreservesShapesOfEveryKind() {
+        val shapes = ShapeKind.entries.mapIndexed { i, kind ->
+            ShapeLayer(
+                LayerId("shape$i"), "Shape $i", kind, 120.5 + i, 60.0,
+                fill = Color.argb(128, 10, 20, 30), stroke = Color.argb(255, 200, 100, 0),
+                strokeWidth = 4.5, cornerRadius = if (kind == ShapeKind.ROUNDED_RECTANGLE) 12.0 else 0.0,
+                transform = Transform(Vec2(10.0 * i, 5.0), 2.0, 2.0, 30.0), opacity = 0.75,
+            )
+        }
+        val doc = manifest.document.copy(layers = manifest.document.layers + shapes)
+        val edited = shapes[2].copy(width = 300.0, fill = Color.TRANSPARENT)
+        val withShapes = manifest.copy(
+            document = doc,
+            history = SavedHistory(undo = listOf(UpdateLayer.of(doc, edited, "Change shape"))),
+        )
+        assertEquals(withShapes, ManifestCodec.decode(ManifestCodec.encode(withShapes)))
+        assertFails("inconsistent", ManifestCodec.encode(withShapes).replace("\"ellipse\"", "\"blob\""))
+    }
+
+    @Test
     fun damagedHistoryFailsClearly() {
         val encoded = ManifestCodec.encode(manifest)
         val broken = encoded.replace("\"undo\": []", "\"undo\": [ { \"type\": \"teleport\" } ]")
@@ -204,7 +226,7 @@ class ManifestCodecTest {
 
     @Test
     fun rejectsNewerFormat() {
-        val newer = ManifestCodec.encode(manifest).replace("\"formatVersion\": 3", "\"formatVersion\": 4")
+        val newer = ManifestCodec.encode(manifest).replace("\"formatVersion\": 4", "\"formatVersion\": 5")
         assertFails("newer version", newer)
     }
 
@@ -212,7 +234,7 @@ class ManifestCodecTest {
     fun rejectsBrokenFiles() {
         assertFails("not valid JSON", "{ truncated")
         assertFails("no format version", "{}")
-        assertFails("damaged", """{ "formatVersion": 3 }""")
+        assertFails("damaged", """{ "formatVersion": 4 }""")
         // A layer pointing at an asset that isn't listed.
         val missingAsset = ManifestCodec.encode(manifest).replace("\"assetId\": \"${"b".repeat(64)}\"", "\"assetId\": \"${"d".repeat(64)}\"")
         assertFails("inconsistent", missingAsset)

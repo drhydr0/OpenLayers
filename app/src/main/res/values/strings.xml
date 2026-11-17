@@ -66,15 +66,11 @@
 
     <string name="editor_back_description">Back to projects</string>
     <string name="editor_canvas_description">Canvas</string>
-    <string name="editor_add_image">Image</string>
-    <string name="editor_add_image_description">Add an image from your photos</string>
     <string name="editor_import_failed">Could not add that image.</string>
     <string name="editor_save_failed">Could not save. Free up storage, then tap “Not saved” to try again.</string>
     <string name="editor_default_image_name">Image</string>
     <string name="projects_open_image">Open image</string>
     <string name="projects_open_image_description">Start a new project from a photo, sized to match it</string>
-    <string name="editor_add_text">Text</string>
-    <string name="editor_add_text_description">Add text</string>
     <string name="editor_default_text_name">Text</string>
     <string name="text_add_title">Add text</string>
     <string name="text_edit_title">Edit text</string>
@@ -179,8 +175,6 @@
     <string name="scope_editing">Editing inside: %1$s</string>
     <string name="scope_exit">Done</string>
     <string name="scope_exit_description">Finish editing inside this group</string>
-    <string name="editor_add_sticker">Sticker</string>
-    <string name="editor_add_sticker_description">Insert a sticker from your collection</string>
     <string name="action_make_sticker">Make sticker (copy as one object)</string>
     <string name="action_save_sticker">Save to sticker collection</string>
     <string name="default_sticker_name">Sticker</string>
@@ -240,5 +234,31 @@
     <string name="capture_preview_description">Preview of the image sticker</string>
     <string name="capture_create">Create</string>
     <string name="default_image_sticker_name">Image sticker</string>
+    <string name="editor_add">Add</string>
+    <string name="editor_add_description">Add an image, text, shape, or sticker</string>
+    <string name="add_image">Image</string>
+    <string name="add_text">Text</string>
+    <string name="add_shape">Shape</string>
+    <string name="add_sticker">Sticker from collection</string>
+    <string name="shape_rectangle">Rectangle</string>
+    <string name="shape_rounded_rectangle">Rounded rectangle</string>
+    <string name="shape_ellipse">Ellipse</string>
+    <string name="shape_line">Line</string>
+    <string name="shape_arrow">Arrow</string>
+    <string name="selection_edit_shape">Edit shape</string>
+    <string name="selection_edit_shape_description">Change the size, fill, or outline of the selected shape</string>
+    <string name="shape_edit_title">Edit shape</string>
+    <string name="shape_fill">Fill</string>
+    <string name="shape_outline_color">Outline color</string>
+    <string name="shape_line_color">Color</string>
+    <string name="shape_outline_width">Outline thickness</string>
+    <string name="shape_width">Width</string>
+    <string name="shape_length">Length</string>
+    <string name="shape_height">Height</string>
+    <string name="shape_corner">Corner rounding</string>
+    <string name="color_none">None</string>
+    <!-- %1$d = a size in canvas pixels -->
+    <string name="pixels_value">%1$d px</string>
+    <string name="layers_kind_shape">Shape</string>
     <string name="editor_open_failed">Could not open the project.</string>
 </resources>

@@ -7,6 +7,7 @@ import io.github.drhydr0.layers.document.GroupLayer
 import io.github.drhydr0.layers.document.ImageAsset
 import io.github.drhydr0.layers.document.ImageLayer
 import io.github.drhydr0.layers.document.Layer
+import io.github.drhydr0.layers.document.ShapeLayer
 import io.github.drhydr0.layers.document.TextLayer
 import kotlin.math.ceil
 import kotlin.math.max
@@ -67,7 +68,7 @@ object ExportPlanner {
                 when (layer) {
                     is ImageLayer -> result[layer.assetId] = max(result[layer.assetId] ?: 0.0, own)
                     is GroupLayer -> visit(layer.children, own)
-                    is TextLayer -> Unit
+                    is TextLayer, is ShapeLayer -> Unit
                 }
             }
         }

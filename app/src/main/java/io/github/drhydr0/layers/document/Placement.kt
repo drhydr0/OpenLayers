@@ -55,6 +55,30 @@ object Placement {
     /** Largest size offered on the text sheet: half the canvas width. */
     fun maxFontSize(canvas: CanvasSpec) = (canvas.width / 2.0).coerceAtLeast(MIN_FONT_SIZE * 2)
 
+    /**
+     * A new shape sized for the area being looked at: a third of its shorter side, with
+     * lines and arrows as wide as that and thin. The outline scales with it.
+     */
+    fun defaultShape(id: LayerId, name: String, kind: ShapeKind, frame: PlacementFrame): ShapeLayer {
+        val side = min(frame.sizing.width, frame.sizing.height) / 3.0
+        val strokeWidth = (side / 25).coerceAtLeast(1.0)
+        val line = kind == ShapeKind.LINE || kind == ShapeKind.ARROW
+        return ShapeLayer(
+            id = id,
+            name = name,
+            kind = kind,
+            width = side,
+            height = if (line) strokeWidth * ShapeLayer.ARROW_HEAD_FACTOR else side,
+            fill = if (line) Color.TRANSPARENT else DEFAULT_SHAPE_FILL,
+            stroke = Color.BLACK,
+            strokeWidth = if (line) strokeWidth else 0.0,
+            cornerRadius = if (kind == ShapeKind.ROUNDED_RECTANGLE) side / 6 else 0.0,
+            transform = Transform(position = frame.center),
+        )
+    }
+
+    val DEFAULT_SHAPE_FILL = Color(0xFF1E88E5.toInt())
+
     const val DEFAULT_FRACTION = 0.8
     const val MIN_FONT_SIZE = 8.0
 }

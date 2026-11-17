@@ -1,6 +1,7 @@
 package io.github.drhydr0.layers.document
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PlacementTest {
@@ -68,5 +69,31 @@ class PlacementTest {
         assertVec(Vec2(540.0, 540.0), fitted.center)
         assertEquals(c.width to c.height, fitted.sizing.width to fitted.sizing.height)
         assertVec(Vec2(540.0, 540.0), Placement.frame(c, null).center)
+    }
+
+    @Test
+    fun newShapesAreSizedForTheViewAndPlacedAtItsCenter() {
+        val frame = Placement.frame(CanvasSpec(1080, 1920), Rect(100.0, 100.0, 400.0, 700.0))
+        val box = Placement.defaultShape(LayerId("s"), "Shape", ShapeKind.ROUNDED_RECTANGLE, frame)
+        assertEquals(100.0, box.width, EPS)
+        assertEquals(100.0, box.height, EPS)
+        assertVec(Vec2(250.0, 400.0), box.transform.position)
+        assertEquals(255, box.fill.alpha)
+        assertTrue(box.cornerRadius > 0)
+        val arrow = Placement.defaultShape(LayerId("a"), "Arrow", ShapeKind.ARROW, frame)
+        assertEquals(0, arrow.fill.alpha)
+        assertEquals(4.0, arrow.strokeWidth, EPS)
+        assertTrue(arrow.isLine)
+        // The box is tall enough to hold the arrow head.
+        assertEquals(16.0, arrow.localBounds.height, EPS)
+    }
+
+    @Test
+    fun shapeBoundsIncludeTheOutline() {
+        val plain = ShapeLayer(LayerId("s"), "s", ShapeKind.ELLIPSE, 100.0, 50.0, strokeWidth = 0.0)
+        assertEquals(Rect.centered(100.0, 50.0), plain.localBounds)
+        assertEquals(Rect.centered(110.0, 60.0), plain.copy(strokeWidth = 10.0).localBounds)
+        // A transparent outline adds nothing.
+        assertEquals(Rect.centered(100.0, 50.0), plain.copy(strokeWidth = 10.0, stroke = Color.TRANSPARENT).localBounds)
     }
 }
