@@ -87,6 +87,7 @@ kotlin {
 
 dependencies {
     implementation(libs.kotlinx.serialization.json)
+    implementation(libs.androidx.recyclerview)
     testImplementation(libs.junit)
 }
 

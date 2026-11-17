@@ -1,0 +1,6 @@
+<resources>
+    <color name="canvas_workspace">#FF2B2B2F</color>
+    <!-- Over content outside the canvas: visible for repositioning, clearly not exported. -->
+    <color name="canvas_outside_dim">#B32B2B2F</color>
+    <color name="canvas_edge">#66FFFFFF</color>
+</resources>
