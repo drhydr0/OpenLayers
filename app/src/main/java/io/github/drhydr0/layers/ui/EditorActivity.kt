@@ -13,6 +13,7 @@ import io.github.drhydr0.layers.LayersApp
 import io.github.drhydr0.layers.R
 import io.github.drhydr0.layers.diagnostics.AppLog
 import io.github.drhydr0.layers.document.ImageLayer
+import io.github.drhydr0.layers.document.Layer
 import io.github.drhydr0.layers.document.LayerId
 import io.github.drhydr0.layers.document.Placement
 import io.github.drhydr0.layers.document.TextLayer
@@ -20,6 +21,8 @@ import io.github.drhydr0.layers.document.TextStyle
 import io.github.drhydr0.layers.document.Transform
 import io.github.drhydr0.layers.history.AddLayers
 import io.github.drhydr0.layers.history.History
+import io.github.drhydr0.layers.history.MoveLayer
+import io.github.drhydr0.layers.history.RemoveLayers
 import io.github.drhydr0.layers.history.UpdateLayer
 import io.github.drhydr0.layers.interaction.CanvasTouchController
 import io.github.drhydr0.layers.interaction.HitTest
@@ -42,6 +45,9 @@ class EditorActivity : Activity() {
     private lateinit var touch: CanvasTouchController
     private lateinit var undoButton: ImageButton
     private lateinit var redoButton: ImageButton
+    private lateinit var layersPanel: LayersPanel
+    private lateinit var layersContainer: View
+    private lateinit var layersEmpty: View
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -56,6 +62,7 @@ class EditorActivity : Activity() {
         undoButton = findViewById<ImageButton>(R.id.editor_undo).apply { setOnClickListener { session?.history?.undo() } }
         redoButton = findViewById<ImageButton>(R.id.editor_redo).apply { setOnClickListener { session?.history?.redo() } }
         setUpTouch()
+        setUpLayersPanel()
 
         projectId = intent.getStringExtra(EXTRA_PROJECT_ID) ?: run {
             finish()
@@ -94,9 +101,11 @@ class EditorActivity : Activity() {
                         canvasView.document = it.document
                         touch.documentChanged(it.document)
                         updateUndoRedo(it)
+                        refreshLayers()
                     }
                     canvasView.document = history.document
                     updateUndoRedo(history)
+                    refreshLayers()
                 }.onFailure {
                     AppLog.e(TAG, "Could not open project $projectId", it)
                     Toast.makeText(this, R.string.editor_open_failed, Toast.LENGTH_LONG).show()
@@ -120,12 +129,61 @@ class EditorActivity : Activity() {
             hitTest = hitTest,
             document = { session?.document },
             commit = { session?.commit(it) },
-            onSelectionChanged = { id -> AppLog.i(TAG, if (id == null) "Selection cleared" else "Selected a layer") },
+            onSelectionChanged = { refreshLayers() },
             onEditText = ::editText,
         )
         canvasView.setOnTouchListener(touch)
         // Draws against what's on screen, so handles follow a gesture preview.
         canvasView.overlay = { c -> canvasView.document?.let { touch.overlay.draw(c, it) } }
+    }
+
+    private fun setUpLayersPanel() {
+        layersContainer = findViewById(R.id.editor_layers_panel)
+        layersEmpty = findViewById(R.id.editor_layers_empty)
+        layersPanel = LayersPanel(
+            list = findViewById(R.id.editor_layers_list),
+            onSelect = touch::select,
+            onMove = { id, to ->
+                val doc = session?.document ?: return@LayersPanel
+                session?.commit(MoveLayer.of(doc, id, to))
+            },
+            onRename = ::askRenameLayer,
+            onDelete = { layer ->
+                val doc = session?.document ?: return@LayersPanel
+                session?.commit(RemoveLayers.of(doc, listOf(layer.id)))
+            },
+        )
+        findViewById<Button>(R.id.editor_layers).setOnClickListener {
+            layersContainer.visibility = if (layersContainer.visibility == View.VISIBLE) View.GONE else View.VISIBLE
+            refreshLayers()
+        }
+    }
+
+    private fun refreshLayers() {
+        val doc = session?.document ?: return
+        if (layersContainer.visibility != View.VISIBLE) return
+        layersEmpty.visibility = if (doc.layers.isEmpty()) View.VISIBLE else View.GONE
+        layersPanel.show(doc, touch.selectedId)
+    }
+
+    private fun askRenameLayer(layer: Layer) {
+        val input = android.widget.EditText(this).apply {
+            setText(layer.name)
+            setSelectAllOnFocus(true)
+            contentDescription = getString(R.string.layers_rename_title)
+        }
+        android.app.AlertDialog.Builder(this)
+            .setTitle(R.string.layers_rename_title)
+            .setView(input)
+            .setPositiveButton(R.string.layers_rename) { _, _ ->
+                val name = input.text.toString().trim()
+                val doc = session?.document ?: return@setPositiveButton
+                if (name.isNotEmpty() && doc.layer(layer.id) != null) {
+                    session?.commit(UpdateLayer.rename(doc, layer.id, name))
+                }
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
     }
 
     private fun updateUndoRedo(history: History) {
