@@ -66,9 +66,13 @@ class PreviewImages(
         /** Sharp on a phone screen even when zoomed in somewhat, at 16 MB per image at most. */
         const val DEFAULT_MAX_SIDE = 2048
 
-        /** Decodes with EXIF orientation applied, scaled down so neither side exceeds [maxSide]. */
-        fun decodeBounded(file: File, maxSide: Int): Bitmap =
+        /**
+         * Decodes with EXIF orientation applied, scaled down so neither side exceeds [maxSide].
+         * [software] is needed when drawing into a Bitmap (thumbnails, export) rather than the screen.
+         */
+        fun decodeBounded(file: File, maxSide: Int, software: Boolean = false): Bitmap =
             ImageDecoder.decodeBitmap(ImageDecoder.createSource(file)) { decoder, info, _ ->
+                if (software) decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
                 val longest = max(info.size.width, info.size.height)
                 if (longest > maxSide) {
                     val scale = maxSide.toDouble() / longest

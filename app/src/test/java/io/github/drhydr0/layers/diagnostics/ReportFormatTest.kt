@@ -37,7 +37,7 @@ class ReportFormatTest {
     }
 
     @Test
-    fun diagnosticsReportShowsMissingDocumentClearly() {
+    fun diagnosticsReportShowsMissingProjectClearly() {
         val text = DiagnosticsReport.format(
             DiagnosticsSnapshot(
                 identity = identity,
@@ -58,8 +58,8 @@ class ReportFormatTest {
             "Commit: abc123def456",
             "Java heap: 10.0 MB of 512.0 MB",
             "Device available: 3.00 GB (LOW)",
-            "Layers: no document open",
-            "History entries: no document open",
+            "Layers: no project opened yet",
+            "History entries: no project opened yet",
         ).forEach { assertTrue("missing: $it", text.contains(it)) }
     }
 
@@ -70,5 +70,17 @@ class ReportFormatTest {
         assertEquals("1.5 KB", DiagnosticsReport.formatBytes(1536))
         assertEquals("1.0 MB", DiagnosticsReport.formatBytes(1024L * 1024))
         assertEquals("2.00 GB", DiagnosticsReport.formatBytes(2L * 1024 * 1024 * 1024))
+    }
+
+    @Test
+    fun diagnosticsReportShowsProjectCounts() {
+        val text = DiagnosticsReport.format(
+            DiagnosticsSnapshot(
+                identity, "t", 0, 1, 0, 0, false, 0, 0,
+                layerCount = 12, historySize = 40, recentLog = emptyList(),
+            ),
+        )
+        assertTrue(text.contains("Layers: 12"))
+        assertTrue(text.contains("History entries: 40"))
     }
 }

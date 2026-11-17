@@ -1,10 +1,12 @@
 package io.github.drhydr0.layers.ui
 
+import android.graphics.Bitmap
 import android.text.format.DateUtils
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageButton
+import android.widget.ImageView
 import android.widget.PopupMenu
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
@@ -18,13 +20,15 @@ class ProjectListAdapter(
 ) : RecyclerView.Adapter<ProjectListAdapter.Row>() {
 
     private var projects: List<ProjectInfo> = emptyList()
+    private var thumbnails: Map<String, Bitmap> = emptyMap()
 
     init {
         setHasStableIds(true)
     }
 
-    fun submit(newProjects: List<ProjectInfo>) {
+    fun submit(newProjects: List<ProjectInfo>, newThumbnails: Map<String, Bitmap>) {
         projects = newProjects
+        thumbnails = newThumbnails
         // Lists are small and change rarely; a full refresh keeps this simple.
         @Suppress("NotifyDataSetChanged")
         notifyDataSetChanged()
@@ -44,10 +48,12 @@ class ProjectListAdapter(
         private val name: TextView = view.findViewById(R.id.project_name)
         private val edited: TextView = view.findViewById(R.id.project_edited)
         private val more: ImageButton = view.findViewById(R.id.project_more)
+        private val thumbnail: ImageView = view.findViewById(R.id.project_thumbnail)
 
         fun bind(info: ProjectInfo) {
             val context = itemView.context
             name.text = info.name
+            thumbnail.setImageBitmap(thumbnails[info.id])
             edited.text = context.getString(
                 R.string.projects_edited,
                 DateUtils.getRelativeTimeSpanString(info.modifiedAtMillis),

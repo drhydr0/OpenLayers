@@ -154,6 +154,16 @@ class ProjectStoreTest {
         assertEquals(listOf(created.info), store.list().projects)
     }
 
+    @Test
+    fun thumbnailWrittenAtomicallyAndSkippedForDeletedProject() {
+        val p = store.create("Card", canvas, 100)
+        store.writeThumbnail(p.info.id) { it.write(byteArrayOf(1, 2, 3)) }
+        assertEquals(listOf<Byte>(1, 2, 3), store.thumbnailFile(p.info.id).readBytes().toList())
+        store.delete(p.info.id)
+        store.writeThumbnail(p.info.id) { it.write(byteArrayOf(9)) }
+        assertFalse(File(temp.root, "projects/${p.info.id}").exists())
+    }
+
     @Test(expected = IllegalArgumentException::class)
     fun idsCannotEscapeProjectsFolder() {
         store.load("../../etc")

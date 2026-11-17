@@ -98,10 +98,20 @@ class ProjectStore(root: File) {
 
     fun assets(id: String) = AssetStore(File(projectDir(id), "assets"))
 
+    /** A small PNG preview for the project list; may be missing or a little behind the latest save. */
+    fun thumbnailFile(id: String) = File(projectDir(id), THUMBNAIL)
+
+    fun writeThumbnail(id: String, write: (java.io.OutputStream) -> Unit) {
+        // Never create a folder for a project that was deleted while its thumbnail rendered.
+        if (!manifestFile(id).isFile) return
+        writeAtomically(thumbnailFile(id)) { write(it) }
+    }
+
     /** Cleans leftovers from interrupted writes. Call once at startup. */
     fun deleteTempFiles() {
         projectsDir.listFiles { f -> f.isDirectory }?.forEach { dir ->
             File(dir, MANIFEST + ".tmp").delete()
+            File(dir, THUMBNAIL + ".tmp").delete()
             assets(dir.name).deleteTempFiles()
         }
     }
@@ -116,6 +126,7 @@ class ProjectStore(root: File) {
 
     private companion object {
         const val MANIFEST = "manifest.json"
+        const val THUMBNAIL = "thumbnail.png"
         val ID_PATTERN = Regex("[A-Za-z0-9-]{1,64}")
     }
 }

@@ -16,6 +16,11 @@ class LayersApp : Application() {
     /** Image decoding, kept apart from [io] so a large decode never delays a save. */
     val decode: ExecutorService = Executors.newFixedThreadPool(2) { Thread(it, "layers-decode") }
 
+    /** Thumbnail rendering: low priority, one at a time, never in the way of saves or the screen. */
+    val thumbnails: ExecutorService = Executors.newSingleThreadExecutor {
+        Thread(it, "layers-thumbnails").apply { priority = Thread.MIN_PRIORITY }
+    }
+
     lateinit var crashReports: CrashReportStore
         private set
 

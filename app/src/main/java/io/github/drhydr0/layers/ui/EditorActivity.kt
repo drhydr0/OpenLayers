@@ -12,6 +12,7 @@ import android.widget.Toast
 import io.github.drhydr0.layers.LayersApp
 import io.github.drhydr0.layers.R
 import io.github.drhydr0.layers.diagnostics.AppLog
+import io.github.drhydr0.layers.diagnostics.EditorStats
 import io.github.drhydr0.layers.document.ImageLayer
 import io.github.drhydr0.layers.document.Layer
 import io.github.drhydr0.layers.document.LayerId
@@ -27,10 +28,12 @@ import io.github.drhydr0.layers.history.UpdateLayer
 import io.github.drhydr0.layers.interaction.CanvasTouchController
 import io.github.drhydr0.layers.interaction.HitTest
 import io.github.drhydr0.layers.persistence.SaveQueue
+import io.github.drhydr0.layers.persistence.format.ProjectManifest
 import io.github.drhydr0.layers.platform.ImageImporter
 import io.github.drhydr0.layers.platform.ImagePicker
 import io.github.drhydr0.layers.render.DocumentView
 import io.github.drhydr0.layers.render.PreviewImages
+import io.github.drhydr0.layers.render.ThumbnailRenderer
 
 /** The editor for one project: canvas, tools, and saving after every change. */
 class EditorActivity : Activity() {
@@ -98,6 +101,13 @@ class EditorActivity : Activity() {
                     findViewById<TextView>(R.id.editor_title).text = manifest.info.name
                     val history = History(manifest.document)
                     session = EditorSession(manifest.info, history, newSaveQueue(), System::currentTimeMillis)
+                    val thumbnails = newThumbnailQueue()
+                    if (!app.projects.thumbnailFile(projectId).exists()) thumbnails.submit(0, manifest)
+                    history.addListener {
+                        session?.let { s -> thumbnails.submit(it.version, ProjectManifest(s.info, it.document)) }
+                        EditorStats.latest = EditorStats.Snapshot(it.document.layers.size, it.size)
+                    }
+                    EditorStats.latest = EditorStats.Snapshot(history.document.layers.size, history.size)
                     history.addListener {
                         canvasView.document = it.document
                         touch.documentChanged(it.document)
@@ -208,6 +218,16 @@ class EditorActivity : Activity() {
         redoButton.alpha = if (history.canRedo) 1f else DISABLED_ALPHA
         redoButton.contentDescription = history.redoLabel
             ?.let { getString(R.string.editor_redo_action, it) } ?: getString(R.string.editor_redo)
+    }
+
+    /** Re-renders the project-list thumbnail after edits, newest version only. */
+    private fun newThumbnailQueue(): SaveQueue {
+        val renderer = ThumbnailRenderer({ app.projects.assets(projectId).file(it) })
+        return SaveQueue(
+            executor = app.thumbnails,
+            save = { m -> app.projects.writeThumbnail(m.info.id) { renderer.writePng(m.document, it) } },
+            onResult = { version, error -> if (error != null) AppLog.w(TAG, "Thumbnail $version failed", error) },
+        )
     }
 
     private fun newSaveQueue() = SaveQueue(

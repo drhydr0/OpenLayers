@@ -13,7 +13,7 @@ data class DiagnosticsSnapshot(
     val deviceLowMemory: Boolean,
     val cacheBytes: Long,
     val filesBytes: Long,
-    // Null until the editor has a document and history.
+    // Of the last project opened since launch; null before any.
     val layerCount: Int?,
     val historySize: Int?,
     val recentLog: List<String>,
@@ -34,9 +34,9 @@ object DiagnosticsReport {
         appendLine("Storage:")
         appendLine("  Cache: ${formatBytes(s.cacheBytes)}")
         appendLine("  Files: ${formatBytes(s.filesBytes)}")
-        appendLine("Document:")
-        appendLine("  Layers: ${s.layerCount ?: "no document open"}")
-        appendLine("  History entries: ${s.historySize ?: "no document open"}")
+        appendLine("Last open project:")
+        appendLine("  Layers: ${s.layerCount ?: "no project opened yet"}")
+        appendLine("  History entries: ${s.historySize ?: "no project opened yet"}")
         appendLine()
         appendLine("Recent log (${s.recentLog.size} lines):")
         s.recentLog.forEach(::appendLine)

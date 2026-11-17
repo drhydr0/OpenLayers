@@ -23,8 +23,8 @@ class DiagnosticsCollector(private val context: Context) {
             deviceLowMemory = memoryInfo.lowMemory,
             cacheBytes = sizeOf(context.cacheDir),
             filesBytes = sizeOf(context.filesDir),
-            layerCount = null,
-            historySize = null,
+            layerCount = EditorStats.latest?.layerCount,
+            historySize = EditorStats.latest?.historySize,
             recentLog = AppLog.buffer.snapshot(),
         )
     }
