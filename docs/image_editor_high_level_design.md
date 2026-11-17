@@ -12,9 +12,9 @@ This document proposes the product behavior, high-level architecture, delivery s
 
 | Area | Design requirement |
 | --- | --- |
-| Development computer | Arch Linux laptop with 8 GB total RAM |
-| Development workflow | Codex working with a local project and command-line build tools |
-| Build and installation | Standalone Android SDK, pinned Gradle wrapper, compatible JDK, and APK installation over ADB |
+| Development device | The developer works only from an Android phone (Pixel 9 Pro) through the Claude mobile app. There is no local computer, Android Studio, or ADB |
+| Development workflow | Claude Code working in a cloud VM, with command-line builds and JVM tests. The app cannot be run on a device or emulator in the session |
+| Build and installation | Pinned Gradle wrapper, compatible JDK, and Android SDK. GitHub Actions is the authoritative build. The phone installs signed APKs from the `dev` GitHub Release |
 | Primary test device | One physical Pixel 9 Pro |
 | Application | Native Android app with local project storage and offline core editing |
 | Layer capacity | No arbitrary small layer-count cap. Practical capacity depends on content, device memory, and storage |
@@ -158,6 +158,7 @@ Exports use an immutable snapshot of the document taken when export begins. Rend
 | Renderer | Canvas previews, thumbnails, selection captures, and final exports |
 | Persistence | Project transactions, autosave, recovery, asset lifetime, and schema migrations |
 | Platform integration | Photo import, file access, gallery export, sharing, and app lifecycle |
+| Diagnostics | Crash reports, in-app log buffer, diagnostics screen, and report export |
 
 Proposed implementation uses Kotlin, standard Android Views for interface controls, and a custom canvas View for the document. A small native application module keeps the initial build and dependency graph manageable. Architecture boundaries can be packages within that module.
 
@@ -173,25 +174,27 @@ Final image output can require substantial memory even when previews are small. 
 
 Proposed validation targets include a 300-layer mixed composition, nested editable stickers, and 1,000 compact history actions with save and reopen. These are initial test workloads, not promised capacity ceilings. Measure gesture responsiveness, import latency, export time, disk growth, and peak memory on the Pixel 9 Pro. Use progressively larger workloads to identify practical limits.
 
-## Development within 8 GB RAM
+## Development from a phone
 
-Use terminal builds with the Gradle wrapper and direct installation on the Pixel. Start with one Gradle worker, parallel project execution disabled, and approximately 1 GB of Gradle heap. Account separately for Kotlin compilation, native build processes, the operating system, and other applications. These initial settings require measurement and may need adjustment.
+All development happens from the phone. Claude Code edits, builds, and runs JVM unit tests in a cloud VM. GitHub Actions runs unit tests, lint, and a debug build on every pull request and uploads the APK as an artifact. Pushes to `main` build a signed APK and replace it on the `dev` pre-release, which the phone installs over the previous build.
 
-Pin compatible tool versions and keep dependencies focused. Establish a successful clean build, incremental build, APK install, and crash-log workflow before expanding the editor. Record peak memory for the complete build process tree and available system memory during each milestone. The laptop must remain usable without sustained swapping or memory-related termination.
+Pin compatible tool versions and keep dependencies focused. Establish green CI, a signed `dev` release, update-install without data loss, and the crash-report workflow before expanding the editor. Builds are signed with one stable key held in GitHub Actions secrets, and the application ID never changes, so updates never force an uninstall.
 
-Use physical-device interaction checks, ADB logs, screenshots, and targeted automated checks for document transformations, history, save recovery, and export consistency. The existing computer is the required development environment. Additional device coverage can be considered when broader distribution becomes a goal.
+There is no ADB or logcat, so the app reports on itself. An uncaught-exception handler saves a crash report that the next launch offers to share. A diagnostics screen shows recent log lines, memory, cache sizes, layer count, and history size, and exports them through the share sheet. Debug builds show the commit hash so screenshots and reports map to exact code.
+
+Use physical-device interaction checks, in-app diagnostics, screenshots, and targeted automated checks for document transformations, history, save recovery, and export consistency. Logic in the document, history, and file-format components runs as JVM tests in the VM. Tests that need Android graphics run as instrumented tests on an emulator in CI.
 
 ## Delivery sequence
 
 | Milestone | Usable outcome and completion gate |
 | --- | --- |
-| Build foundation | APK builds within measured laptop resources and launches on the Pixel |
+| Build foundation | Cached SDK setup, green CI, signed APK on the `dev` release, update-install over a previous build without data loss, crash report and diagnostics export |
 | Editable canvas | Import images, add text, transform objects, manage basic layers, save, reopen, and export |
 | Reliable editing | Persistent undo and redo, atomic multilayer operations, autosave recovery, locks, and visibility |
 | Reusable compositions | Grouping, independent duplicates, editable stickers, sticker collection, and nested editing |
 | Selection tools | Rectangle and lasso scope selection, canvas or layer capture, transparent image stickers |
 | Polished workflow | Shapes, text styling, image adjustments, snapping, alignment, distribution, and accessibility |
-| Capacity verification | Large-document tests, history retention checks, export consistency, and build-memory validation |
+| Capacity verification | Large-document tests, history retention checks, export consistency, and emulator tests in CI |
 
 The complete first release includes all of these milestones. Later extensions can include custom font import, more advanced masks, and additional image effects, driven by actual editing needs.
 
@@ -204,14 +207,13 @@ The complete first release includes all of these milestones. Later extensions ca
 5. Save a sticker, reopen the application, and insert it into another project. Edit its text and verify earlier uses preserve their content.
 6. Interrupt the app during saving and reopen it. Verify recovery reaches a consistent committed state with matching undo history and intact assets.
 7. Export a transparent PNG and an opaque JPEG. Compare placement, text wrapping, crop boundaries, colors, and clipping with the editor preview at the chosen dimensions.
-8. Build and install on the 8 GB Arch laptop, then exercise the large-document workload on the Pixel. Record memory and responsiveness before claiming practical capacity.
+8. Install the `dev` release over a previous build and confirm existing projects survive. Exercise the large-document workload on the Pixel and record memory and responsiveness from the diagnostics screen before claiming practical capacity.
 
 ## Technical references
 
 The product behavior above is a proposed design. These official references support the platform and resource-management approach.
 
-- Android command-line builds and APK installation. https://developer.android.com/build/building-cmdline
-- Gradle build memory and worker configuration. https://docs.gradle.org/current/userguide/build_environment.html
+- Android command-line builds. https://developer.android.com/build/building-cmdline
 - Android image decoding and preview memory. https://developer.android.com/topic/performance/graphics/load-bitmap
 - Android bitmap caching. https://developer.android.com/topic/performance/graphics/cache-bitmap
 - Android Photo Picker. https://developer.android.com/training/data-storage/shared/photo-picker
