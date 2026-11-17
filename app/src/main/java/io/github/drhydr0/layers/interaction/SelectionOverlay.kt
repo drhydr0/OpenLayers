@@ -63,7 +63,7 @@ class SelectionOverlay(
         c.drop(1).forEach { path.lineTo(it.x.toFloat(), it.y.toFloat()) }
         path.close()
         canvas.drawPath(path, outlinePaint)
-        if (layer.locked) return
+        if (layer.locked || !layer.visible) return
 
         val all = handles(doc, layer)
         val topMid = mid(c[0], c[1])

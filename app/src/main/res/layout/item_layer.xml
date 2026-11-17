@@ -53,6 +53,22 @@
     </LinearLayout>
 
     <ImageButton
+        android:id="@+id/layer_visible"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:background="?android:attr/selectableItemBackgroundBorderless"
+        android:contentDescription="@string/layers_toggle_visible_generic"
+        android:src="@drawable/ic_visibility" />
+
+    <ImageButton
+        android:id="@+id/layer_lock"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:background="?android:attr/selectableItemBackgroundBorderless"
+        android:contentDescription="@string/layers_toggle_lock_generic"
+        android:src="@drawable/ic_lock_open" />
+
+    <ImageButton
         android:id="@+id/layer_more"
         android:layout_width="48dp"
         android:layout_height="48dp"

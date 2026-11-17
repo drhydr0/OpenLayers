@@ -26,6 +26,8 @@ class LayersPanel(
     private val list: RecyclerView,
     private val onSelect: (LayerId) -> Unit,
     private val onMove: (LayerId, toDocIndex: Int) -> Unit,
+    private val onToggleVisible: (Layer) -> Unit,
+    private val onToggleLocked: (Layer) -> Unit,
     private val onRename: (Layer) -> Unit,
     private val onDelete: (Layer) -> Unit,
 ) {
@@ -95,6 +97,8 @@ class LayersPanel(
         private val detail: TextView = view.findViewById(R.id.layer_detail)
         private val handle: ImageView = view.findViewById(R.id.layer_drag)
         private val more: ImageButton = view.findViewById(R.id.layer_more)
+        private val eye: ImageButton = view.findViewById(R.id.layer_visible)
+        private val lock: ImageButton = view.findViewById(R.id.layer_lock)
 
         @android.annotation.SuppressLint("ClickableViewAccessibility") // Move up/down in the menu is the accessible route.
         fun bind(layer: Layer) {
@@ -110,6 +114,22 @@ class LayersPanel(
                     detail.text = layer.text.lineSequence().first().take(PREVIEW_CHARS)
                 }
             }
+            // Hidden layers read as dimmed, so the list mirrors what the canvas shows.
+            val dim = if (layer.visible) 1f else HIDDEN_ALPHA
+            name.alpha = dim
+            detail.alpha = dim
+            icon.alpha = dim
+            eye.setImageResource(if (layer.visible) R.drawable.ic_visibility else R.drawable.ic_visibility_off)
+            eye.contentDescription = context.getString(
+                if (layer.visible) R.string.layers_hide else R.string.layers_show, layer.name,
+            )
+            eye.setOnClickListener { onToggleVisible(layer) }
+            lock.setImageResource(if (layer.locked) R.drawable.ic_lock else R.drawable.ic_lock_open)
+            lock.alpha = if (layer.locked) 1f else UNLOCKED_ALPHA
+            lock.contentDescription = context.getString(
+                if (layer.locked) R.string.layers_unlock else R.string.layers_lock, layer.name,
+            )
+            lock.setOnClickListener { onToggleLocked(layer) }
             itemView.isActivated = layer.id == selectedId
             itemView.contentDescription = context.getString(R.string.layers_select_description, layer.name)
             itemView.setOnClickListener { onSelect(layer.id) }
@@ -144,6 +164,8 @@ class LayersPanel(
 
     private companion object {
         const val PREVIEW_CHARS = 40
+        const val HIDDEN_ALPHA = 0.4f
+        const val UNLOCKED_ALPHA = 0.5f
         const val MENU_UP = 1
         const val MENU_DOWN = 2
         const val MENU_RENAME = 3

@@ -54,6 +54,8 @@ class EditorActivity : Activity() {
     private lateinit var touch: CanvasTouchController
     private lateinit var undoButton: ImageButton
     private lateinit var redoButton: ImageButton
+    private lateinit var saveStatus: TextView
+    private val saveTracker = SaveTracker()
     private lateinit var layersPanel: LayersPanel
     private lateinit var layersContainer: View
     private lateinit var layersEmpty: View
@@ -70,6 +72,9 @@ class EditorActivity : Activity() {
         findViewById<Button>(R.id.editor_add_text).setOnClickListener { addText() }
         undoButton = findViewById<ImageButton>(R.id.editor_undo).apply { setOnClickListener { session?.history?.undo() } }
         redoButton = findViewById<ImageButton>(R.id.editor_redo).apply { setOnClickListener { session?.history?.redo() } }
+        saveStatus = findViewById<TextView>(R.id.editor_save_status).apply {
+            setOnClickListener { if (saveTracker.state == SaveTracker.State.FAILED) session?.retrySave() }
+        }
         setUpTouch()
         setUpLayersPanel()
         setUpNavigation()
@@ -111,6 +116,12 @@ class EditorActivity : Activity() {
                     findViewById<TextView>(R.id.editor_title).text = manifest.info.name
                     val history = History(manifest.document, manifest.history)
                     session = EditorSession(manifest.info, history, newSaveQueue(), System::currentTimeMillis)
+                    // Registered after the session's own listener, so the save is already queued.
+                    history.addListener { h ->
+                        saveTracker.onEdit(h.version)
+                        showSaveStatus()
+                    }
+                    showSaveStatus()
                     val thumbnails = newThumbnailQueue()
                     if (!app.projects.thumbnailFile(projectId).exists()) thumbnails.submit(0, manifest)
                     history.addListener {
@@ -226,6 +237,12 @@ class EditorActivity : Activity() {
                 val doc = session?.document ?: return@LayersPanel
                 session?.commit(MoveLayer.of(doc, id, to))
             },
+            onToggleVisible = { layer ->
+                session?.let { it.commit(UpdateLayer.setVisible(it.document, layer.id, !layer.visible)) }
+            },
+            onToggleLocked = { layer ->
+                session?.let { it.commit(UpdateLayer.setLocked(it.document, layer.id, !layer.locked)) }
+            },
             onRename = ::askRenameLayer,
             onDelete = { layer ->
                 val doc = session?.document ?: return@LayersPanel
@@ -290,14 +307,26 @@ class EditorActivity : Activity() {
         executor = app.io,
         save = app.projects::save,
         onResult = { version, error ->
-            if (error != null) {
-                AppLog.e(TAG, "Save of version $version failed", error)
-                runOnUiThread {
-                    if (!isDestroyed) Toast.makeText(this, R.string.editor_save_failed, Toast.LENGTH_LONG).show()
-                }
+            if (error != null) AppLog.e(TAG, "Save of version $version failed", error)
+            runOnUiThread {
+                saveTracker.onSaveResult(version, success = error == null)
+                if (isDestroyed) return@runOnUiThread
+                showSaveStatus()
+                if (error != null) Toast.makeText(this, R.string.editor_save_failed, Toast.LENGTH_LONG).show()
             }
         },
     )
+
+    /** "Saved" appears only once the newest edit and its history record are on disk. */
+    private fun showSaveStatus() {
+        saveStatus.setText(
+            when (saveTracker.state) {
+                SaveTracker.State.SAVED -> R.string.save_status_saved
+                SaveTracker.State.SAVING -> R.string.save_status_saving
+                SaveTracker.State.FAILED -> R.string.save_status_failed
+            },
+        )
+    }
 
     private fun addImage(uri: android.net.Uri) {
         val assets = app.projects.assets(projectId)

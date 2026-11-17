@@ -13,6 +13,8 @@ sealed interface Layer {
 
     fun withTransform(transform: Transform): Layer
     fun withName(name: String): Layer
+    fun withVisible(visible: Boolean): Layer
+    fun withLocked(locked: Boolean): Layer
 }
 
 data class ImageLayer(
@@ -30,6 +32,8 @@ data class ImageLayer(
 
     override fun withTransform(transform: Transform) = copy(transform = transform)
     override fun withName(name: String) = copy(name = name)
+    override fun withVisible(visible: Boolean) = copy(visible = visible)
+    override fun withLocked(locked: Boolean) = copy(locked = locked)
 }
 
 enum class TextAlignment { START, CENTER, END }
@@ -64,6 +68,8 @@ data class TextLayer(
 
     override fun withTransform(transform: Transform) = copy(transform = transform)
     override fun withName(name: String) = copy(name = name)
+    override fun withVisible(visible: Boolean) = copy(visible = visible)
+    override fun withLocked(locked: Boolean) = copy(locked = locked)
 }
 
 private fun requireOpacity(opacity: Double) =

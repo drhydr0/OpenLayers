@@ -104,7 +104,8 @@ class CanvasTouchController(
         downY = event.y
         moved = false
         val point = toCanvas(event.x, event.y)
-        val selected = selectedId?.let(doc::layer)?.takeIf { !it.locked }
+        // Locked or hidden layers stay selectable in the panel but can't be moved by touch.
+        val selected = selectedId?.let(doc::layer)?.takeIf { !it.locked && it.visible }
 
         val handle = selected?.let { overlay.handleAt(doc, it, event.x, event.y) }
         // A finger inside the selected layer keeps it as the target even if another layer covers it.

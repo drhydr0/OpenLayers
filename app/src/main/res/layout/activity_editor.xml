@@ -19,15 +19,30 @@
             android:contentDescription="@string/editor_back_description"
             android:src="@drawable/ic_arrow_back" />
 
-        <TextView
-            android:id="@+id/editor_title"
+        <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_marginStart="8dp"
             android:layout_weight="1"
-            android:ellipsize="end"
-            android:maxLines="1"
-            android:textAppearance="?android:attr/textAppearanceMedium" />
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/editor_title"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:textAppearance="?android:attr/textAppearanceMedium" />
+
+            <TextView
+                android:id="@+id/editor_save_status"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:accessibilityLiveRegion="polite"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:textAppearance="?android:attr/textAppearanceSmall" />
+        </LinearLayout>
 
         <ImageButton
             android:id="@+id/editor_navigate"
