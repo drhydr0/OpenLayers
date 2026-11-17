@@ -1,0 +1,3 @@
+<resources>
+    <style name="Theme.Layers" parent="android:Theme.DeviceDefault.DayNight" />
+</resources>
