@@ -12,7 +12,10 @@ import io.github.drhydr0.layers.document.TextLayer
 import io.github.drhydr0.layers.document.TextStyle
 import io.github.drhydr0.layers.document.Transform
 import io.github.drhydr0.layers.document.Vec2
+import io.github.drhydr0.layers.document.GroupLayer
 import io.github.drhydr0.layers.history.AddLayers
+import io.github.drhydr0.layers.history.History
+import io.github.drhydr0.layers.history.ReplaceLayers
 import io.github.drhydr0.layers.history.MoveLayer
 import io.github.drhydr0.layers.history.PlacedLayer
 import io.github.drhydr0.layers.history.RemoveLayers
@@ -61,7 +64,7 @@ class ManifestCodecTest {
 
     @Test
     fun encodedFileIsVersioned() {
-        assertTrue(ManifestCodec.encode(manifest).contains("\"formatVersion\": 2"))
+        assertTrue(ManifestCodec.encode(manifest).contains("\"formatVersion\": 3"))
     }
 
     @Test
@@ -131,6 +134,61 @@ class ManifestCodecTest {
     }
 
     @Test
+    fun roundTripPreservesGroupsAndGroupCommands() {
+        val base = manifest.document
+        val inner = GroupLayer(LayerId("inner"), "Inner", listOf(base.layers[2]), Transform(Vec2(5.0, 6.0), 2.0, 2.0, 15.0), opacity = 0.5)
+        val outer = GroupLayer(LayerId("outer"), "Outer", listOf(base.layers[1], inner), locked = true)
+        val doc = base.copy(layers = listOf(base.layers[0], outer))
+        var n = 0
+        val history = SavedHistory(
+            undo = listOf(
+                ReplaceLayers.group(doc, listOf(LayerId("img-1")), LayerId("g2"), "Group", Vec2(1.0, 2.0)),
+                ReplaceLayers.ungroup(doc, LayerId("inner")),
+                AddLayers.duplicates(doc, listOf(LayerId("inner")), Vec2(20.0, 20.0)) { LayerId("copy${n++}") },
+                RemoveLayers.of(doc, listOf(LayerId("img-2"))),
+            ),
+        )
+        val withGroups = manifest.copy(document = doc, history = history)
+        val read = ManifestCodec.decode(ManifestCodec.encode(withGroups))
+        assertEquals(withGroups, read)
+        assertEquals("Duplicate layer", read.history.undo[2].label)
+        assertEquals(LayerId("inner"), (read.history.undo[3] as RemoveLayers).removed.single().parentId)
+    }
+
+    /** A file in the version 2 format (history, no groups) as written before groups existed. */
+    @Test
+    fun readsVersion2SampleFile() {
+        val v2 = """
+            {
+              "formatVersion": 2,
+              "project": { "id": "p-2", "name": "Two", "createdAtMillis": 1, "modifiedAtMillis": 2 },
+              "canvas": { "width": 100, "height": 100, "background": "#FFFFFFFF" },
+              "layers": [
+                { "type": "text", "id": "t", "name": "Words", "text": "Hi", "transform": { "x": 4.0, "y": 5.0 },
+                  "fontSize": 30.0, "color": "#FF000000", "alignment": "center", "boxWidth": 200.0 }
+              ],
+              "history": {
+                "undo": [
+                  { "type": "add", "placements": [ { "index": 0, "layer":
+                    { "type": "text", "id": "t", "name": "Words", "text": "Hi", "transform": { "x": 0.0, "y": 0.0 },
+                      "fontSize": 30.0, "color": "#FF000000", "alignment": "center", "boxWidth": 200.0 } } ] },
+                  { "type": "transform", "label": "Move layer", "changes": [
+                    { "id": "t", "before": { "x": 0.0, "y": 0.0 }, "after": { "x": 4.0, "y": 5.0 } } ] }
+                ],
+                "redo": []
+              }
+            }
+        """.trimIndent()
+        val read = ManifestCodec.decode(v2)
+        assertEquals(listOf("Add layer", "Move layer"), read.history.undo.map { it.label })
+        // Old placements have no parent: they belong to the top level.
+        assertEquals(null, (read.history.undo[0] as AddLayers).placements.single().parentId)
+        val history = History(read.document, read.history)
+        assertTrue(history.undo() && history.undo())
+        assertTrue(history.document.layers.isEmpty())
+    }
+
+    @Test
     fun damagedHistoryFailsClearly() {
         val encoded = ManifestCodec.encode(manifest)
         val broken = encoded.replace("\"undo\": []", "\"undo\": [ { \"type\": \"teleport\" } ]")
@@ -146,7 +204,7 @@ class ManifestCodecTest {
 
     @Test
     fun rejectsNewerFormat() {
-        val newer = ManifestCodec.encode(manifest).replace("\"formatVersion\": 2", "\"formatVersion\": 3")
+        val newer = ManifestCodec.encode(manifest).replace("\"formatVersion\": 3", "\"formatVersion\": 4")
         assertFails("newer version", newer)
     }
 
@@ -154,7 +212,7 @@ class ManifestCodecTest {
     fun rejectsBrokenFiles() {
         assertFails("not valid JSON", "{ truncated")
         assertFails("no format version", "{}")
-        assertFails("damaged", """{ "formatVersion": 2 }""")
+        assertFails("damaged", """{ "formatVersion": 3 }""")
         // A layer pointing at an asset that isn't listed.
         val missingAsset = ManifestCodec.encode(manifest).replace("\"assetId\": \"${"b".repeat(64)}\"", "\"assetId\": \"${"d".repeat(64)}\"")
         assertFails("inconsistent", missingAsset)

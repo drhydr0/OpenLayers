@@ -31,7 +31,12 @@ internal data class HistoryDto(
 )
 
 @Serializable
-internal data class PlacedLayerDto(val index: Int, val layer: LayerDto)
+internal data class PlacedLayerDto(
+    val index: Int,
+    val layer: LayerDto,
+    /** Since format 3. Null means the top level. */
+    val parentId: String? = null,
+)
 
 @Serializable
 internal data class TransformChangeDto(val id: String, val before: TransformDto, val after: TransformDto)
@@ -44,6 +49,16 @@ internal sealed interface CommandDto
 internal data class AddLayersDto(
     val placements: List<PlacedLayerDto>,
     val assets: List<AssetDto> = emptyList(),
+    /** Since format 3: "Add" or "Duplicate", for the history list. */
+    val verb: String = "Add",
+) : CommandDto
+
+@Serializable
+@SerialName("replace")
+internal data class ReplaceLayersDto(
+    val label: String,
+    val removed: List<PlacedLayerDto>,
+    val added: List<PlacedLayerDto>,
 ) : CommandDto
 
 @Serializable
@@ -117,6 +132,20 @@ internal data class ImageLayerDto(
     override val visible: Boolean = true,
     override val locked: Boolean = false,
     val assetId: String,
+) : LayerDto
+
+/** Since format 3. */
+@Serializable
+@SerialName("group")
+internal data class GroupLayerDto(
+    override val id: String,
+    override val name: String,
+    override val transform: TransformDto,
+    override val opacity: Double = 1.0,
+    override val visible: Boolean = true,
+    override val locked: Boolean = false,
+    /** Bottom of the stack first. */
+    val children: List<LayerDto> = emptyList(),
 ) : LayerDto
 
 @Serializable

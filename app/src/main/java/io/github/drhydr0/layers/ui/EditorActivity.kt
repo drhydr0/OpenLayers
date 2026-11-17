@@ -16,17 +16,21 @@ import io.github.drhydr0.layers.LayersApp
 import io.github.drhydr0.layers.R
 import io.github.drhydr0.layers.diagnostics.AppLog
 import io.github.drhydr0.layers.diagnostics.EditorStats
+import io.github.drhydr0.layers.document.GroupLayer
 import io.github.drhydr0.layers.document.ImageLayer
 import io.github.drhydr0.layers.document.Layer
 import io.github.drhydr0.layers.document.LayerId
 import io.github.drhydr0.layers.document.Placement
+import io.github.drhydr0.layers.document.Rect
 import io.github.drhydr0.layers.document.TextLayer
 import io.github.drhydr0.layers.document.TextStyle
 import io.github.drhydr0.layers.document.Transform
+import io.github.drhydr0.layers.document.Vec2
 import io.github.drhydr0.layers.history.AddLayers
 import io.github.drhydr0.layers.history.History
 import io.github.drhydr0.layers.history.MoveLayer
 import io.github.drhydr0.layers.history.RemoveLayers
+import io.github.drhydr0.layers.history.ReplaceLayers
 import io.github.drhydr0.layers.history.UpdateLayer
 import io.github.drhydr0.layers.interaction.CanvasTouchController
 import io.github.drhydr0.layers.interaction.HitTest
@@ -57,6 +61,8 @@ class EditorActivity : Activity() {
     private lateinit var redoButton: ImageButton
     private lateinit var saveStatus: TextView
     private lateinit var selectionBar: View
+    private lateinit var scopeBar: View
+    private lateinit var scopeName: TextView
     private lateinit var selectionCount: TextView
     private val saveTracker = SaveTracker()
     private lateinit var layersPanel: LayersPanel
@@ -144,6 +150,7 @@ class EditorActivity : Activity() {
                         touch.documentChanged(it.document)
                         updateUndoRedo(it)
                         refreshLayers()
+                        refreshScopeBar()
                     }
                     canvasView.document = history.document
                     updateUndoRedo(history)
@@ -164,6 +171,8 @@ class EditorActivity : Activity() {
             when (layer) {
                 is ImageLayer -> doc.imageLocalBounds(layer)
                 is TextLayer -> canvasView.textLayouts.localBounds(layer)
+                // HitTest works out a group's box from its children.
+                is GroupLayer -> Rect(0.0, 0.0, 0.0, 0.0)
             }
         }
         touch = CanvasTouchController(
@@ -176,6 +185,10 @@ class EditorActivity : Activity() {
                 refreshSelectionBar()
             },
             onEditText = ::editText,
+            onScopeChanged = {
+                refreshScopeBar()
+                refreshLayers()
+            },
         )
         canvasView.setOnTouchListener(touch)
         // Draws against what's on screen, so handles follow a gesture preview.
@@ -256,6 +269,8 @@ class EditorActivity : Activity() {
 
     private fun setUpSelectionBar() {
         selectionBar = findViewById(R.id.editor_selection_bar)
+        scopeBar = findViewById(R.id.editor_scope_bar)
+        scopeName = findViewById(R.id.editor_scope_name)
         selectionCount = findViewById(R.id.editor_selection_count)
         val multi = findViewById<Button>(R.id.editor_multiselect)
         multi.setOnClickListener {
@@ -265,11 +280,81 @@ class EditorActivity : Activity() {
                 if (touch.multiSelectMode) R.string.editor_multiselect_on else R.string.editor_multiselect_off,
             )
         }
+        findViewById<Button>(R.id.editor_selection_actions).setOnClickListener(::showSelectionActions)
+        findViewById<Button>(R.id.editor_scope_exit).setOnClickListener {
+            // One level out at a time, so nested groups step back the way they were entered.
+            val doc = session?.document ?: return@setOnClickListener
+            val scope = touch.scopeId ?: return@setOnClickListener
+            touch.enterScope(doc.ancestors(scope)?.lastOrNull()?.id)
+            touch.select(scope)
+        }
         findViewById<Button>(R.id.editor_delete_selection).setOnClickListener {
             val current = session ?: return@setOnClickListener
             // Locked layers are protected from deletion along with the rest of the selection.
             val ids = touch.selectedIds.filter { current.document.layer(it)?.locked == false }
             if (ids.isNotEmpty()) current.commit(RemoveLayers.of(current.document, ids))
+        }
+    }
+
+    private fun showSelectionActions(anchor: View) {
+        val current = session ?: return
+        val doc = current.document
+        val selected = touch.selectedIds.mapNotNull(doc::layer)
+        if (selected.isEmpty()) return
+        val singleGroup = selected.singleOrNull() as? GroupLayer
+        PopupMenu(this, anchor).apply {
+            menu.add(0, ACTION_DUPLICATE, 0, R.string.action_duplicate)
+            menu.add(0, ACTION_GROUP, 1, R.string.action_group)
+            if (singleGroup != null) {
+                menu.add(0, ACTION_UNGROUP, 2, R.string.action_ungroup)
+                menu.add(0, ACTION_EDIT_GROUP, 3, R.string.action_edit_group)
+            }
+            setOnMenuItemClickListener {
+                when (it.itemId) {
+                    ACTION_DUPLICATE -> duplicateSelection()
+                    ACTION_GROUP -> groupSelection()
+                    ACTION_UNGROUP -> singleGroup?.let(::ungroup)
+                    ACTION_EDIT_GROUP -> singleGroup?.let { g -> touch.enterScope(g.id) }
+                }
+                true
+            }
+        }.show()
+    }
+
+    /** Independent copies, slightly offset, stacked above the originals and selected. */
+    private fun duplicateSelection() {
+        val current = session ?: return
+        val doc = current.document
+        val offset = doc.canvas.width * DUPLICATE_OFFSET_FRACTION
+        val command = AddLayers.duplicates(doc, touch.selectedIds, Vec2(offset, offset), LayerId::random)
+        current.commit(command)
+        touch.setSelection(command.placements.mapTo(LinkedHashSet()) { it.layer.id })
+    }
+
+    private fun groupSelection() {
+        val current = session ?: return
+        val doc = current.document
+        val center = touch.selectionCenter(doc) ?: return
+        val groupId = LayerId.random()
+        current.commit(ReplaceLayers.group(doc, touch.selectedIds, groupId, getString(R.string.default_group_name), center))
+        touch.select(groupId)
+    }
+
+    private fun ungroup(group: GroupLayer) {
+        val current = session ?: return
+        val command = ReplaceLayers.ungroup(current.document, group.id)
+        current.commit(command)
+        touch.setSelection(command.added.mapTo(LinkedHashSet()) { it.layer.id })
+    }
+
+    private fun refreshScopeBar() {
+        val doc = session?.document
+        val scope = touch.scopeId
+        val group = scope?.let { doc?.layer(it) }
+        scopeBar.visibility = if (group == null) View.GONE else View.VISIBLE
+        if (doc != null && group != null) {
+            val path = doc.ancestors(group.id).orEmpty().map { it.name } + group.name
+            scopeName.text = getString(R.string.scope_editing, path.joinToString(" › "))
         }
     }
 
@@ -284,7 +369,7 @@ class EditorActivity : Activity() {
         layersEmpty = findViewById(R.id.editor_layers_empty)
         layersPanel = LayersPanel(
             list = findViewById(R.id.editor_layers_list),
-            onSelect = { id -> if (touch.multiSelectMode) touch.toggle(id) else touch.select(id) },
+            onSelect = { id -> session?.let { touch.selectInTree(it.document, id, touch.multiSelectMode) } },
             onMove = { id, to ->
                 val doc = session?.document ?: return@LayersPanel
                 session?.commit(MoveLayer.of(doc, id, to))
@@ -396,6 +481,8 @@ class EditorActivity : Activity() {
                         transform = Placement.centeredFit(doc.canvas, asset.width, asset.height),
                     )
                     current.commit(AddLayers.onTop(doc, layer, asset))
+                    // New content goes on the top level, so step out of any group first.
+                    touch.enterScope(null)
                     touch.select(layer.id)
                     AppLog.i(TAG, "Added image ${asset.width}x${asset.height} ${asset.mimeType}")
                 }.onFailure {
@@ -420,6 +507,7 @@ class EditorActivity : Activity() {
                 transform = Transform(position = canvas.bounds.center),
             )
             current.commit(AddLayers.onTop(current.document, layer))
+            touch.enterScope(null)
             touch.select(layer.id)
             AppLog.i(TAG, "Added text layer")
         }
@@ -441,6 +529,11 @@ class EditorActivity : Activity() {
         private const val EXTRA_PROJECT_ID = "project_id"
         private const val REQUEST_ADD_IMAGE = 1
         private const val DISABLED_ALPHA = 0.38f
+        private const val ACTION_DUPLICATE = 1
+        private const val ACTION_GROUP = 2
+        private const val ACTION_UNGROUP = 3
+        private const val ACTION_EDIT_GROUP = 4
+        private const val DUPLICATE_OFFSET_FRACTION = 0.04
         private const val MENU_FIT = 1
         private const val MENU_HISTORY = 2
         private const val PROGRESS_PADDING = 48

@@ -1,8 +1,13 @@
 package io.github.drhydr0.layers.render
 
 import io.github.drhydr0.layers.document.CanvasSpec
+import io.github.drhydr0.layers.document.AssetId
+import io.github.drhydr0.layers.document.Document
+import io.github.drhydr0.layers.document.GroupLayer
 import io.github.drhydr0.layers.document.ImageAsset
-import io.github.drhydr0.layers.document.Transform
+import io.github.drhydr0.layers.document.ImageLayer
+import io.github.drhydr0.layers.document.Layer
+import io.github.drhydr0.layers.document.TextLayer
 import kotlin.math.ceil
 import kotlin.math.max
 import kotlin.math.roundToInt
@@ -40,12 +45,34 @@ object ExportPlanner {
 
     /**
      * Longest side to decode an image at: enough for its largest size in the output, never
-     * more than the original. Saves memory on images shown small.
+     * more than the original. Saves memory on images shown small. [shownScale] is how
+     * much the image is enlarged on the canvas, from [largestScales].
      */
-    fun decodeSide(asset: ImageAsset, transform: Transform, scale: Double): Int {
+    fun decodeSide(asset: ImageAsset, shownScale: Double, scale: Double): Int {
         val original = max(asset.width, asset.height)
-        val needed = ceil(original * max(transform.scaleX, transform.scaleY) * scale).toInt()
+        val needed = ceil(original * shownScale * scale).toInt()
         return needed.coerceIn(1, original)
+    }
+
+    /**
+     * For each image that will be drawn, the largest scale any visible layer shows it at,
+     * including the scale of every group around it.
+     */
+    fun largestScales(document: Document): Map<AssetId, Double> {
+        val result = mutableMapOf<AssetId, Double>()
+        fun visit(layers: List<Layer>, outer: Double) {
+            for (layer in layers) {
+                if (!layer.visible) continue
+                val own = outer * max(layer.transform.scaleX, layer.transform.scaleY)
+                when (layer) {
+                    is ImageLayer -> result[layer.assetId] = max(result[layer.assetId] ?: 0.0, own)
+                    is GroupLayer -> visit(layer.children, own)
+                    is TextLayer -> Unit
+                }
+            }
+        }
+        visit(document.layers, 1.0)
+        return result
     }
 
     private const val BYTES_PER_PIXEL = 4L

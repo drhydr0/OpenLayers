@@ -5,7 +5,6 @@ import android.graphics.Canvas
 import io.github.drhydr0.layers.document.AssetId
 import io.github.drhydr0.layers.document.Color
 import io.github.drhydr0.layers.document.Document
-import io.github.drhydr0.layers.document.ImageLayer
 import java.io.File
 import java.io.OutputStream
 import java.util.concurrent.CancellationException
@@ -56,9 +55,8 @@ class Exporter(private val fileFor: (AssetId) -> File) {
 
     /** Each image once, at the largest size any visible layer shows it in the output. */
     private fun decodeImages(doc: Document, scale: Double): Map<AssetId, Bitmap> {
-        val sides = doc.layers.filterIsInstance<ImageLayer>().filter { it.visible }
-            .groupBy { it.assetId }
-            .mapValues { (id, layers) -> layers.maxOf { ExportPlanner.decodeSide(doc.assets.getValue(id), it.transform, scale) } }
+        val sides = ExportPlanner.largestScales(doc)
+            .mapValues { (id, shown) -> ExportPlanner.decodeSide(doc.assets.getValue(id), shown, scale) }
         val decoded = mutableMapOf<AssetId, Bitmap>()
         try {
             sides.forEach { (id, side) ->

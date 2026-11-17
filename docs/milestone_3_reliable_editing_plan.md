@@ -31,7 +31,7 @@ Deferred, with reasons:
 
 ## Steps
 
-All 9 steps are built. Related steps were combined into one PR where that saved a round of CI.
+Milestone closed on 2026-11-17 after the developer ran the phone test with no issues. All 9 steps are built. Related steps were combined into one PR where that saved a round of CI.
 
 | # | Step | PR | Verified by |
 | --- | --- | --- | --- |

@@ -162,5 +162,22 @@
     <string name="editor_menu_history">History</string>
     <string name="history_title">History</string>
     <string name="history_oldest">Oldest saved state</string>
+    <plurals name="layers_group_count">
+        <item quantity="one">Group · %d layer</item>
+        <item quantity="other">Group · %d layers</item>
+    </plurals>
+    <string name="layers_expand">Show layers inside %1$s</string>
+    <string name="layers_collapse">Hide layers inside %1$s</string>
+    <string name="selection_actions">Actions</string>
+    <string name="selection_actions_description">Duplicate, group, and more for the selected layers</string>
+    <string name="action_duplicate">Duplicate</string>
+    <string name="action_group">Group</string>
+    <string name="action_ungroup">Ungroup</string>
+    <string name="action_edit_group">Edit inside group</string>
+    <string name="default_group_name">Group</string>
+    <!-- %1$s = group names from outermost to innermost, e.g. "Card › Title" -->
+    <string name="scope_editing">Editing inside: %1$s</string>
+    <string name="scope_exit">Done</string>
+    <string name="scope_exit_description">Finish editing inside this group</string>
     <string name="editor_open_failed">Could not open the project.</string>
 </resources>

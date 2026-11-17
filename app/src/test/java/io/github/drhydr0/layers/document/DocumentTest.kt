@@ -62,7 +62,7 @@ class DocumentTest {
         Document(canvas()).withLayerInserted(0, imageLayer("a", imageAsset('b')))
     }
 
-    @Test(expected = IllegalArgumentException::class)
+    @Test(expected = NoSuchElementException::class)
     fun removingMissingLayerFails() {
         doc.withLayerRemoved(LayerId("zzz"))
     }

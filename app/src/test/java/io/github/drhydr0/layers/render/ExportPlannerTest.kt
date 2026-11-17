@@ -1,6 +1,10 @@
 package io.github.drhydr0.layers.render
 
 import io.github.drhydr0.layers.document.CanvasSpec
+import io.github.drhydr0.layers.document.Document
+import io.github.drhydr0.layers.document.GroupLayer
+import io.github.drhydr0.layers.document.ImageLayer
+import io.github.drhydr0.layers.document.LayerId
 import io.github.drhydr0.layers.document.Transform
 import io.github.drhydr0.layers.document.imageAsset
 import org.junit.Assert.assertEquals
@@ -30,10 +34,22 @@ class ExportPlannerTest {
     @Test
     fun imagesDecodeOnlyAsLargeAsShown() {
         val photo = imageAsset(width = 4000, height = 3000)
-        assertEquals(1000, ExportPlanner.decodeSide(photo, Transform(scaleX = 0.25, scaleY = 0.25), 1.0))
-        assertEquals(2000, ExportPlanner.decodeSide(photo, Transform(scaleX = 0.25, scaleY = 0.25), 2.0))
+        assertEquals(1000, ExportPlanner.decodeSide(photo, 0.25, 1.0))
+        assertEquals(2000, ExportPlanner.decodeSide(photo, 0.25, 2.0))
         // Never beyond the original.
-        assertEquals(4000, ExportPlanner.decodeSide(photo, Transform(scaleX = 3.0, scaleY = 3.0), 2.0))
+        assertEquals(4000, ExportPlanner.decodeSide(photo, 3.0, 2.0))
+    }
+
+    @Test
+    fun largestScaleIncludesGroupsAndSkipsHidden() {
+        val a = imageAsset('a')
+        val b = imageAsset('b')
+        val inGroup = ImageLayer(LayerId("in"), "in", a.id, Transform(scaleX = 0.5, scaleY = 0.5))
+        val group = GroupLayer(LayerId("g"), "g", listOf(inGroup), Transform(scaleX = 4.0, scaleY = 4.0))
+        val small = ImageLayer(LayerId("small"), "small", a.id, Transform(scaleX = 0.1, scaleY = 0.1))
+        val hidden = ImageLayer(LayerId("hidden"), "hidden", b.id, visible = false)
+        val doc = Document(CanvasSpec(100, 100), listOf(group, small, hidden), mapOf(a.id to a, b.id to b))
+        assertEquals(mapOf(a.id to 2.0), ExportPlanner.largestScales(doc))
     }
 }
 

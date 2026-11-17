@@ -15,6 +15,7 @@ sealed interface Layer {
     fun withName(name: String): Layer
     fun withVisible(visible: Boolean): Layer
     fun withLocked(locked: Boolean): Layer
+    fun withOpacity(opacity: Double): Layer
 }
 
 data class ImageLayer(
@@ -34,6 +35,7 @@ data class ImageLayer(
     override fun withName(name: String) = copy(name = name)
     override fun withVisible(visible: Boolean) = copy(visible = visible)
     override fun withLocked(locked: Boolean) = copy(locked = locked)
+    override fun withOpacity(opacity: Double) = copy(opacity = opacity)
 }
 
 enum class TextAlignment { START, CENTER, END }
@@ -70,6 +72,37 @@ data class TextLayer(
     override fun withName(name: String) = copy(name = name)
     override fun withVisible(visible: Boolean) = copy(visible = visible)
     override fun withLocked(locked: Boolean) = copy(locked = locked)
+    override fun withOpacity(opacity: Double) = copy(opacity = opacity)
+}
+
+/**
+ * Ordered child layers (bottom first) sharing one transform, opacity, visibility, and lock.
+ * Children are positioned in the group's own coordinates, so moving the group moves them all.
+ */
+data class GroupLayer(
+    override val id: LayerId,
+    override val name: String,
+    val children: List<Layer>,
+    override val transform: Transform = Transform.IDENTITY,
+    override val opacity: Double = 1.0,
+    override val visible: Boolean = true,
+    override val locked: Boolean = false,
+) : Layer {
+    init {
+        requireOpacity(opacity)
+    }
+
+    override fun withTransform(transform: Transform) = copy(transform = transform)
+    override fun withName(name: String) = copy(name = name)
+    override fun withVisible(visible: Boolean) = copy(visible = visible)
+    override fun withLocked(locked: Boolean) = copy(locked = locked)
+    override fun withOpacity(opacity: Double) = copy(opacity = opacity)
+}
+
+/** This layer and everything inside it, depth first. */
+fun Layer.selfAndDescendants(): Sequence<Layer> = sequence {
+    yield(this@selfAndDescendants)
+    if (this@selfAndDescendants is GroupLayer) children.forEach { yieldAll(it.selfAndDescendants()) }
 }
 
 private fun requireOpacity(opacity: Double) =
