@@ -25,12 +25,20 @@ class ProjectStore(root: File) {
 
     private val projectsDir = File(root, "projects")
 
-    fun create(name: String, canvas: CanvasSpec, nowMillis: Long): ProjectManifest {
-        val info = ProjectInfo(UUID.randomUUID().toString(), name, nowMillis, nowMillis)
-        val manifest = ProjectManifest(info, Document(canvas))
+    fun create(name: String, canvas: CanvasSpec, nowMillis: Long): ProjectManifest =
+        create(newProjectId(), name, Document(canvas), nowMillis)
+
+    /**
+     * Commits a new project whose assets are already in [assets] for [id]. Until this
+     * first save the folder has no manifest, so an interrupted create never lists.
+     */
+    fun create(id: String, name: String, document: Document, nowMillis: Long): ProjectManifest {
+        val manifest = ProjectManifest(ProjectInfo(id, name, nowMillis, nowMillis), document)
         save(manifest)
         return manifest
     }
+
+    fun newProjectId(): String = UUID.randomUUID().toString()
 
     /** Most recently edited first. */
     fun list(): ProjectList {

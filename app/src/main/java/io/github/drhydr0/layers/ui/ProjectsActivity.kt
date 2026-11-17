@@ -6,6 +6,7 @@ package io.github.drhydr0.layers.ui
 import android.app.Activity
 import android.app.AlertDialog
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.view.View
 import android.widget.Button
@@ -19,7 +20,13 @@ import io.github.drhydr0.layers.LayersApp
 import io.github.drhydr0.layers.R
 import io.github.drhydr0.layers.diagnostics.AppLog
 import io.github.drhydr0.layers.document.CanvasSpec
+import io.github.drhydr0.layers.document.Document
+import io.github.drhydr0.layers.document.ImageLayer
+import io.github.drhydr0.layers.document.LayerId
+import io.github.drhydr0.layers.document.Placement
 import io.github.drhydr0.layers.persistence.format.ProjectInfo
+import io.github.drhydr0.layers.platform.ImageImporter
+import io.github.drhydr0.layers.platform.ImagePicker
 import io.github.drhydr0.layers.platform.shareText
 
 /** Project screen: recent projects, create, rename, delete, and open. */
@@ -48,6 +55,9 @@ class ProjectsActivity : Activity() {
         }
         findViewById<Button>(R.id.new_project).setOnClickListener {
             NewProjectDialog.show(this, ::createProject)
+        }
+        findViewById<Button>(R.id.open_image).setOnClickListener {
+            ImagePicker.launch(this, REQUEST_OPEN_IMAGE)
         }
         emptyView = findViewById(R.id.empty)
         damagedView = findViewById(R.id.damaged)
@@ -101,6 +111,41 @@ class ProjectsActivity : Activity() {
                     AppLog.i(TAG, "Created project ${it.info.id} ${canvas.width}x${canvas.height}")
                     openProject(it.info)
                 }.onFailure { showError(R.string.projects_create_failed, it) }
+            }
+        }
+    }
+
+    @Deprecated("Platform Activity result API; this app uses no AndroidX Activity library.")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQUEST_OPEN_IMAGE) ImagePicker.result(resultCode, data)?.let(::createFromImage)
+    }
+
+    /** A project sized to the photo, with the photo filling the canvas. */
+    private fun createFromImage(uri: Uri) {
+        val name = getString(R.string.new_project_default_name)
+        app.io.execute {
+            val store = app.projects
+            val id = store.newProjectId()
+            val result = runCatching {
+                val asset = ImageImporter.import(contentResolver, uri, store.assets(id))
+                val canvas = Placement.canvasForImage(asset.width, asset.height, CanvasSizeRules.MAX_SIDE)
+                val layer = ImageLayer(
+                    LayerId.random(),
+                    getString(R.string.editor_default_image_name),
+                    asset.id,
+                    Placement.fill(canvas, asset.width, asset.height),
+                )
+                val document = Document(canvas).withAsset(asset).withLayerInserted(0, layer)
+                store.create(id, name, document, System.currentTimeMillis())
+            }
+            // Don't leave imported bytes behind for a project that was never created.
+            if (result.isFailure) runCatching { store.delete(id) }
+            runOnUiThread {
+                result.onSuccess {
+                    AppLog.i(TAG, "Created project ${it.info.id} from image ${it.document.canvas.width}x${it.document.canvas.height}")
+                    openProject(it.info)
+                }.onFailure { showError(R.string.editor_import_failed, it) }
             }
         }
     }
@@ -185,5 +230,6 @@ class ProjectsActivity : Activity() {
 
     private companion object {
         const val TAG = "ProjectsActivity"
+        const val REQUEST_OPEN_IMAGE = 1
     }
 }

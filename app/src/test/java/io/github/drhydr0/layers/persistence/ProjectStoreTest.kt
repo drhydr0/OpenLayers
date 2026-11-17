@@ -140,6 +140,20 @@ class ProjectStoreTest {
         }
     }
 
+    @Test
+    fun createWithImportedAssetsUnderReservedId() {
+        val id = store.newProjectId()
+        // Assets are imported before the first save, as when opening a photo as a project.
+        val assetId = store.assets(id).put("photo".byteInputStream())
+        assertTrue(store.list().projects.isEmpty())
+        val doc = io.github.drhydr0.layers.document.Document(canvas)
+            .withAsset(ImageAsset(assetId, "image/jpeg", 10, 10))
+            .withLayerInserted(0, ImageLayer(LayerId("i"), "Photo", assetId))
+        val created = store.create(id, "Photo", doc, 100)
+        assertEquals(created, store.load(id))
+        assertEquals(listOf(created.info), store.list().projects)
+    }
+
     @Test(expected = IllegalArgumentException::class)
     fun idsCannotEscapeProjectsFolder() {
         store.load("../../etc")
