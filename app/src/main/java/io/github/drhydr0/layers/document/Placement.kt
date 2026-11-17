@@ -31,5 +31,15 @@ object Placement {
         return Transform(position = canvas.bounds.center, scaleX = scale, scaleY = scale)
     }
 
+    /** New text spans most of the canvas width, so it's readable and wraps sensibly. */
+    fun defaultTextBoxWidth(canvas: CanvasSpec) = canvas.width * DEFAULT_FRACTION
+
+    /** About a twelfth of the canvas width: 90 px on a 1080 px canvas. */
+    fun defaultFontSize(canvas: CanvasSpec) = (canvas.width / 12.0).coerceAtLeast(MIN_FONT_SIZE)
+
+    /** Largest size offered on the text sheet: half the canvas width. */
+    fun maxFontSize(canvas: CanvasSpec) = (canvas.width / 2.0).coerceAtLeast(MIN_FONT_SIZE * 2)
+
     const val DEFAULT_FRACTION = 0.8
+    const val MIN_FONT_SIZE = 8.0
 }

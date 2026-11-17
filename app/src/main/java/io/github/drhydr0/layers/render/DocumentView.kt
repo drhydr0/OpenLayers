@@ -59,6 +59,9 @@ class DocumentView @JvmOverloads constructor(
         contentDescription = context.getString(R.string.editor_canvas_description)
     }
 
+    // Taps on the canvas count as clicks, so accessibility services see them.
+    override fun performClick(): Boolean = super.performClick()
+
     fun setImageSource(source: ImageSource) {
         images = source
         invalidate()
