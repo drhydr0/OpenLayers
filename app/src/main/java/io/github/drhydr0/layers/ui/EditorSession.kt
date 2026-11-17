@@ -28,6 +28,9 @@ class EditorSession(
     /** Applies a change through history, the only way UI code edits the document. */
     fun commit(command: Command) = history.execute(command)
 
+    /** Tries the newest change again after a failed save. */
+    fun retrySave() = save()
+
     private fun save() {
         info = info.copy(modifiedAtMillis = clock())
         // Document and history go into one file, so they can't disagree after a crash.

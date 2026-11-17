@@ -122,6 +122,19 @@ class CommandsTest {
         assertTrue(UpdateLayer.editText(base, text).isNoOp)
     }
 
+    @Test
+    fun hideAndLockAreUndoable() {
+        val hide = UpdateLayer.setVisible(base, LayerId("b"), false)
+        assertEquals("Hide layer", hide.label)
+        roundTrip(hide) { assertFalse(it.requireLayer(LayerId("b")).visible) }
+        val lock = UpdateLayer.setLocked(base, LayerId("a"), true)
+        assertEquals("Lock layer", lock.label)
+        roundTrip(lock) { assertTrue(it.requireLayer(LayerId("a")).locked) }
+        // Setting the state a layer already has uses no undo step.
+        assertTrue(UpdateLayer.setVisible(base, LayerId("b"), true).isNoOp)
+        assertEquals("Unlock layer", UpdateLayer.setLocked(lock.apply(base), LayerId("a"), false).label)
+    }
+
     // The update looks the layer up by id, so a changed id can never replace another layer.
     @Test(expected = NoSuchElementException::class)
     fun updateCannotChangeIdentity() {

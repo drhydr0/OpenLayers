@@ -141,5 +141,11 @@ data class UpdateLayer(
             of(document, document.requireLayer(id).withName(name), "Rename layer")
 
         fun editText(document: Document, after: TextLayer) = of(document, after, "Change text")
+
+        fun setVisible(document: Document, id: LayerId, visible: Boolean) =
+            of(document, document.requireLayer(id).withVisible(visible), if (visible) "Show layer" else "Hide layer")
+
+        fun setLocked(document: Document, id: LayerId, locked: Boolean) =
+            of(document, document.requireLayer(id).withLocked(locked), if (locked) "Lock layer" else "Unlock layer")
     }
 }
