@@ -40,6 +40,16 @@ class CanvasTouchController(
 
     val overlay = SelectionOverlay(view, hitTest) { selectedId }
 
+    /** While on, every touch moves the view instead of editing (canvas navigation mode). */
+    var navigationMode = false
+        set(value) {
+            // Entering navigation drops any half-finished edit gesture.
+            if (value && !field) cancel()
+            field = value
+        }
+
+    private val navigation = NavigationGestures(view)
+
     private val density = view.resources.displayMetrics.density
     private val touchSlop = ViewConfiguration.get(view.context).scaledTouchSlop
     private val doubleTapTimeout = ViewConfiguration.getDoubleTapTimeout().toLong()
@@ -74,6 +84,10 @@ class CanvasTouchController(
     @SuppressLint("ClickableViewAccessibility") // The layers panel offers the accessible route.
     override fun onTouch(v: View, event: MotionEvent): Boolean {
         val doc = document() ?: return false
+        if (navigationMode) {
+            navigation.onTouch(event)
+            return true
+        }
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> begin(doc, event)
             MotionEvent.ACTION_POINTER_DOWN, MotionEvent.ACTION_POINTER_UP -> rebase(event)

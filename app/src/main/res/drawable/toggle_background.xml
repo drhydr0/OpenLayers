@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Activated shows a toggle button is on, e.g. pan and zoom mode. -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_activated="true">
+        <shape android:shape="oval">
+            <solid android:color="@color/layer_row_selected" />
+        </shape>
+    </item>
+    <item android:drawable="@android:color/transparent" />
+</selector>

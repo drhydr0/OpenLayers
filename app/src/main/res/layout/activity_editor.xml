@@ -30,6 +30,22 @@
             android:textAppearance="?android:attr/textAppearanceMedium" />
 
         <ImageButton
+            android:id="@+id/editor_navigate"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="@drawable/toggle_background"
+            android:contentDescription="@string/editor_navigate_off"
+            android:src="@drawable/ic_pan" />
+
+        <ImageButton
+            android:id="@+id/editor_fit"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/editor_fit"
+            android:src="@drawable/ic_fit_screen" />
+
+        <ImageButton
             android:id="@+id/editor_undo"
             android:layout_width="48dp"
             android:layout_height="48dp"
@@ -53,6 +69,29 @@
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1" />
+
+    <!-- Shares the screen with the canvas so both stay usable; toggled by the Layers button. -->
+    <FrameLayout
+        android:id="@+id/editor_layers_panel"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="0.7"
+        android:background="?android:attr/colorBackground"
+        android:visibility="gone">
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/editor_layers_list"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+
+        <TextView
+            android:id="@+id/editor_layers_empty"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:gravity="center"
+            android:padding="16dp"
+            android:text="@string/layers_empty" />
+    </FrameLayout>
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -79,5 +118,15 @@
             android:contentDescription="@string/editor_add_text_description"
             android:minHeight="56dp"
             android:text="@string/editor_add_text" />
+
+        <Button
+            android:id="@+id/editor_layers"
+            style="?android:attr/buttonBarButtonStyle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:contentDescription="@string/editor_layers_description"
+            android:minHeight="56dp"
+            android:text="@string/editor_layers" />
     </LinearLayout>
 </LinearLayout>

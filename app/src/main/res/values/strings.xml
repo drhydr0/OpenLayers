@@ -102,5 +102,21 @@
     <!-- %1$s = action, e.g. "Move layer" -->
     <string name="editor_undo_action">Undo %1$s</string>
     <string name="editor_redo_action">Redo %1$s</string>
+    <string name="editor_layers">Layers</string>
+    <string name="editor_layers_description">Show or hide the layers list</string>
+    <string name="layers_empty">No layers yet. Add an image or text.</string>
+    <string name="layers_kind_image">Image</string>
+    <string name="layers_select_description">Select %1$s</string>
+    <string name="layers_drag_generic">Drag to reorder</string>
+    <string name="layers_drag_description">Drag to reorder %1$s</string>
+    <string name="layers_more_description">More options for %1$s</string>
+    <string name="layers_move_up">Move up</string>
+    <string name="layers_move_down">Move down</string>
+    <string name="layers_rename">Rename</string>
+    <string name="layers_rename_title">Rename layer</string>
+    <string name="layers_delete">Delete</string>
+    <string name="editor_navigate_off">Pan and zoom mode: off. Tap to move the view instead of layers.</string>
+    <string name="editor_navigate_on">Pan and zoom mode: on. Tap to edit layers again.</string>
+    <string name="editor_fit">Fit canvas to screen</string>
     <string name="editor_open_failed">Could not open the project.</string>
 </resources>
