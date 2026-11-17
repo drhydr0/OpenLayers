@@ -8,6 +8,7 @@ import io.github.drhydr0.layers.document.LayerId
 import io.github.drhydr0.layers.document.TextLayer
 import io.github.drhydr0.layers.history.AddLayers
 import io.github.drhydr0.layers.history.History
+import io.github.drhydr0.layers.history.RemoveLayers
 import io.github.drhydr0.layers.persistence.format.ManifestCodec
 import io.github.drhydr0.layers.persistence.format.ManifestException
 import io.github.drhydr0.layers.persistence.format.ProjectManifest
@@ -91,6 +92,43 @@ class ProjectStoreTest {
         assertTrue(reopened.undo())
         assertTrue(reopened.document.layers.isEmpty())
         assertFalse(reopened.canUndo)
+    }
+
+    @Test
+    fun pruneKeepsImagesNeededByDocumentOrHistoryAndRemovesTheRest() {
+        val p = store.create("Card", canvas, 100)
+        val assets = store.assets(p.info.id)
+        fun import(text: String) = ImageAsset(assets.put(text.byteInputStream()), "image/png", 10, 10)
+        val inDoc = import("in document")
+        val deleted = import("deleted, undo can bring it back")
+        val redoOnly = import("undone add, redo can bring it back")
+        val orphan = import("added, undone, then a new edit cleared redo")
+
+        val history = History(p.document)
+        history.execute(AddLayers.onTop(history.document, ImageLayer(LayerId("a"), "A", inDoc.id), inDoc))
+        history.execute(AddLayers.onTop(history.document, ImageLayer(LayerId("b"), "B", deleted.id), deleted))
+        history.execute(AddLayers.onTop(history.document, ImageLayer(LayerId("x"), "X", orphan.id), orphan))
+        history.undo()
+        // A new edit after undo clears redo, so nothing can bring the orphan back.
+        history.execute(RemoveLayers.of(history.document, listOf(LayerId("b"))))
+        history.execute(AddLayers.onTop(history.document, ImageLayer(LayerId("c"), "C", redoOnly.id), redoOnly))
+        history.undo()
+        val saved = p.copy(document = history.document, history = history.snapshot())
+        store.save(saved)
+
+        val pruned = ProjectStore(temp.root).pruneAssets(store.load(p.info.id))
+        assertEquals(setOf(inDoc.id, deleted.id, redoOnly.id), pruned.document.assets.keys)
+        assertTrue(assets.contains(inDoc.id) && assets.contains(deleted.id) && assets.contains(redoOnly.id))
+        assertFalse(assets.contains(orphan.id))
+        assertEquals(pruned, store.load(p.info.id))
+
+        // Everything history can still reach really works after pruning.
+        val reopened = History(pruned.document, pruned.history)
+        assertTrue(reopened.redo())
+        while (reopened.canUndo) reopened.undo()
+        assertTrue(reopened.document.layers.isEmpty())
+        // Pruning again changes nothing.
+        assertEquals(pruned, store.pruneAssets(pruned))
     }
 
     @Test

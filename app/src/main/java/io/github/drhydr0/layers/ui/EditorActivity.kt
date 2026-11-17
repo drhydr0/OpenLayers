@@ -8,6 +8,7 @@ import android.os.Bundle
 import android.view.View
 import android.widget.Button
 import android.widget.ImageButton
+import android.widget.PopupMenu
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
@@ -111,7 +112,13 @@ class EditorActivity : Activity() {
 
     private fun load() {
         app.io.execute {
-            val result = runCatching { app.projects.load(projectId) }
+            val result = runCatching {
+                val loaded = app.projects.load(projectId)
+                // Safe here: nothing can import into this project until the editor has loaded.
+                runCatching { app.projects.pruneAssets(loaded) }
+                    .onFailure { AppLog.w(TAG, "Image cleanup failed", it) }
+                    .getOrDefault(loaded)
+            }
             runOnUiThread {
                 if (isDestroyed) return@runOnUiThread
                 result.onSuccess { manifest ->
@@ -230,7 +237,21 @@ class EditorActivity : Activity() {
                 if (touch.navigationMode) R.string.editor_navigate_on else R.string.editor_navigate_off,
             )
         }
-        findViewById<ImageButton>(R.id.editor_fit).setOnClickListener { canvasView.fitToScreen() }
+        findViewById<ImageButton>(R.id.editor_more).setOnClickListener(::showMoreMenu)
+    }
+
+    private fun showMoreMenu(anchor: View) {
+        PopupMenu(this, anchor).apply {
+            menu.add(0, MENU_FIT, 0, R.string.editor_menu_fit)
+            menu.add(0, MENU_HISTORY, 1, R.string.editor_menu_history)
+            setOnMenuItemClickListener {
+                when (it.itemId) {
+                    MENU_FIT -> canvasView.fitToScreen()
+                    MENU_HISTORY -> session?.history?.let { h -> HistorySheet.show(this@EditorActivity, h, h::jumpTo) }
+                }
+                true
+            }
+        }.show()
     }
 
     private fun setUpSelectionBar() {
@@ -420,6 +441,8 @@ class EditorActivity : Activity() {
         private const val EXTRA_PROJECT_ID = "project_id"
         private const val REQUEST_ADD_IMAGE = 1
         private const val DISABLED_ALPHA = 0.38f
+        private const val MENU_FIT = 1
+        private const val MENU_HISTORY = 2
         private const val PROGRESS_PADDING = 48
 
         fun intent(context: Context, projectId: String) =

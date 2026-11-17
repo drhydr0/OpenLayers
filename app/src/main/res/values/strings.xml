@@ -117,7 +117,6 @@
     <string name="layers_delete">Delete</string>
     <string name="editor_navigate_off">Pan and zoom mode: off. Tap to move the view instead of layers.</string>
     <string name="editor_navigate_on">Pan and zoom mode: on. Tap to edit layers again.</string>
-    <string name="editor_fit">Fit canvas to screen</string>
     <string name="editor_export">Export</string>
     <string name="export_title">Export image</string>
     <string name="export_format_label">Format</string>
@@ -158,5 +157,10 @@
     </plurals>
     <string name="selection_delete">Delete</string>
     <string name="selection_delete_description">Delete the selected layers</string>
+    <string name="editor_more">More: fit to screen, history</string>
+    <string name="editor_menu_fit">Fit canvas to screen</string>
+    <string name="editor_menu_history">History</string>
+    <string name="history_title">History</string>
+    <string name="history_oldest">Oldest saved state</string>
     <string name="editor_open_failed">Could not open the project.</string>
 </resources>

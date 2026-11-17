@@ -36,6 +36,12 @@ data class Document(
     /** -1 when absent. */
     fun indexOf(id: LayerId): Int = layers.indexOfFirst { it.id == id }
 
+    /** Drops asset records not in [keep]. Assets used by a layer are always kept. */
+    fun withOnlyAssets(keep: Set<AssetId>): Document {
+        val used = layers.filterIsInstance<ImageLayer>().mapTo(mutableSetOf()) { it.assetId }
+        return copy(assets = assets.filterKeys { it in keep || it in used })
+    }
+
     fun withAsset(asset: ImageAsset) = copy(assets = assets + (asset.id to asset))
 
     fun withLayerInserted(index: Int, layer: Layer): Document {

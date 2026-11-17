@@ -53,14 +53,6 @@
             android:src="@drawable/ic_pan" />
 
         <ImageButton
-            android:id="@+id/editor_fit"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:background="?android:attr/selectableItemBackgroundBorderless"
-            android:contentDescription="@string/editor_fit"
-            android:src="@drawable/ic_fit_screen" />
-
-        <ImageButton
             android:id="@+id/editor_undo"
             android:layout_width="48dp"
             android:layout_height="48dp"
@@ -85,6 +77,14 @@
             android:background="?android:attr/selectableItemBackgroundBorderless"
             android:contentDescription="@string/editor_export"
             android:src="@drawable/ic_export" />
+
+        <ImageButton
+            android:id="@+id/editor_more"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/editor_more"
+            android:src="@drawable/ic_more_vert" />
     </LinearLayout>
 
     <io.github.drhydr0.layers.render.DocumentView

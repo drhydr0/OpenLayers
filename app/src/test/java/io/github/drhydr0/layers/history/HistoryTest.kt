@@ -100,6 +100,30 @@ class HistoryTest {
     }
 
     @Test
+    fun jumpToMovesBackAndForwardInOneChange() {
+        val history = History(empty)
+        val states = mutableListOf(history.document)
+        repeat(4) {
+            history.execute(AddLayers.onTop(history.document, textLayer("L$it")))
+            states += history.document
+        }
+        var calls = 0
+        history.addListener { calls++ }
+        assertTrue(history.jumpTo(1))
+        assertEquals(states[1], history.document)
+        assertEquals(1, history.position)
+        assertEquals(1, calls)
+        assertTrue(history.jumpTo(4))
+        assertEquals(states[4], history.document)
+        assertTrue(history.jumpTo(0))
+        assertEquals(empty, history.document)
+        assertFalse(history.jumpTo(0))
+        assertEquals(3, calls)
+        // Labels stay in order whatever the position.
+        assertEquals(List(4) { "Add layer" }, history.labels())
+    }
+
+    @Test
     fun oldestStepsAreDroppedBeyondTheCap() {
         val history = History(empty, maxSteps = 3)
         repeat(5) { history.execute(AddLayers.onTop(history.document, textLayer("L$it"))) }

@@ -2,6 +2,7 @@ package io.github.drhydr0.layers.persistence
 
 import io.github.drhydr0.layers.document.CanvasSpec
 import io.github.drhydr0.layers.document.Document
+import io.github.drhydr0.layers.history.AssetUsage
 import io.github.drhydr0.layers.persistence.format.ManifestCodec
 import io.github.drhydr0.layers.persistence.format.ManifestException
 import io.github.drhydr0.layers.persistence.format.ProjectInfo
@@ -80,6 +81,20 @@ class ProjectStore(root: File) {
         if (missing.isNotEmpty()) throw IOException("Project $id is missing assets $missing")
         val bytes = ManifestCodec.encode(manifest).toByteArray(Charsets.UTF_8)
         writeAtomically(manifestFile(id)) { it.write(bytes) }
+    }
+
+    /**
+     * Removes images that neither the document nor any retained undo or redo step needs.
+     * Call when opening a project, before any import can start. The trimmed manifest is
+     * committed before files are deleted, so an interruption only leaves extra files,
+     * which the next open removes.
+     */
+    fun pruneAssets(manifest: ProjectManifest): ProjectManifest {
+        val keep = AssetUsage.referenced(manifest.document, manifest.history)
+        val trimmed = manifest.copy(document = manifest.document.withOnlyAssets(keep))
+        if (trimmed != manifest) save(trimmed)
+        assets(manifest.info.id).deleteExcept(trimmed.document.assets.keys)
+        return trimmed
     }
 
     fun rename(id: String, name: String, nowMillis: Long): ProjectManifest {

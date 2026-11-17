@@ -63,6 +63,27 @@ class History(
         return true
     }
 
+    /**
+     * Moves to the state after [target] applied steps (0 is the oldest retained state) by
+     * undoing or redoing as needed. Listeners hear about it once, so it saves once.
+     */
+    fun jumpTo(target: Int): Boolean {
+        require(target in 0..(undoStack.size + redoStack.size)) { "position $target out of range" }
+        if (target == undoStack.size) return false
+        while (undoStack.size > target) {
+            val command = undoStack.removeLast()
+            document = command.revert(document)
+            redoStack.addLast(command)
+        }
+        while (undoStack.size < target) {
+            val command = redoStack.removeLast()
+            document = command.apply(document)
+            undoStack.addLast(command)
+        }
+        changed()
+        return true
+    }
+
     /** The stacks as saved with the document, so undo and redo survive a restart. */
     fun snapshot() = SavedHistory(undoStack.toList(), redoStack.toList())
 
