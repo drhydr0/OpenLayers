@@ -123,9 +123,12 @@ data class Document(
         return copy(layers = rebuild(layers))
     }
 
-    /** An image layer's content box in its own coordinates, centered on the origin. Text needs layout, so the renderer measures it. */
+    /**
+     * An image layer's content box in its own coordinates, centered on the origin: the
+     * cropped part of the image at full resolution. Text needs layout, so the renderer measures it.
+     */
     fun imageLocalBounds(layer: ImageLayer): Rect {
         val asset = assets.getValue(layer.assetId)
-        return Rect.centered(asset.width.toDouble(), asset.height.toDouble())
+        return Rect.centered(asset.width * layer.crop.width, asset.height * layer.crop.height)
     }
 }

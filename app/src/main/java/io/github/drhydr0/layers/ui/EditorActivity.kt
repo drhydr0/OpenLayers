@@ -278,6 +278,7 @@ class EditorActivity : Activity() {
             menu.add(0, MENU_FIT, 0, R.string.editor_menu_fit)
             menu.add(0, MENU_HISTORY, 1, R.string.editor_menu_history)
             menu.add(0, MENU_AREA, 2, R.string.editor_menu_area)
+            menu.add(0, MENU_CHECKPOINT, 4, R.string.editor_menu_checkpoint)
             menu.add(0, MENU_SNAPPING, 3, R.string.editor_menu_snapping).apply {
                 isCheckable = true
                 isChecked = touch.snappingEnabled
@@ -287,6 +288,7 @@ class EditorActivity : Activity() {
                     MENU_FIT -> canvasView.fitToScreen()
                     MENU_HISTORY -> session?.history?.let { h -> HistorySheet.show(this@EditorActivity, h, h::jumpTo) }
                     MENU_SNAPPING -> touch.snappingEnabled = !touch.snappingEnabled
+                    MENU_CHECKPOINT -> askCheckpoint()
                     MENU_AREA -> if (session != null) {
                         AreaSelectSheet.show(this@EditorActivity, touch.selectedIds.size, ::startArea)
                     }
@@ -326,6 +328,7 @@ class EditorActivity : Activity() {
             when (val layer = selectedSingle()) {
                 is TextLayer -> editText(layer)
                 is ShapeLayer -> editShape(layer)
+                is ImageLayer -> editImage(layer)
                 else -> Unit
             }
         }
@@ -335,6 +338,40 @@ class EditorActivity : Activity() {
             val ids = touch.selectedIds.filter { current.document.layer(it)?.locked == false }
             if (ids.isNotEmpty()) current.commit(RemoveLayers.of(current.document, ids))
         }
+    }
+
+    /**
+     * A named checkpoint: the project as it is now, saved as a separate copy with its undo
+     * history, so an experiment can always be abandoned by opening the copy.
+     */
+    private fun askCheckpoint() {
+        val current = session ?: return
+        val input = EditText(this).apply {
+            setText(getString(R.string.checkpoint_default_name, current.info.name))
+            setSelectAllOnFocus(true)
+            hint = getString(R.string.checkpoint_name_hint)
+        }
+        AlertDialog.Builder(this)
+            .setTitle(R.string.checkpoint_title)
+            .setMessage(R.string.checkpoint_message)
+            .setView(input)
+            .setPositiveButton(R.string.checkpoint_save) { _, _ ->
+                val name = input.text.toString().trim().ifEmpty { getString(R.string.checkpoint_default_name, current.info.name) }
+                // The state on screen now, not whatever save happens to be on disk.
+                val snapshot = ProjectManifest(current.info, current.document, current.history.snapshot())
+                app.io.execute {
+                    val result = runCatching { app.projects.saveCopy(snapshot, name, System.currentTimeMillis()) }
+                    result.onFailure { AppLog.e(TAG, "Checkpoint failed", it) }
+                    runOnUiThread {
+                        if (isDestroyed) return@runOnUiThread
+                        Toast.makeText(
+                            this, if (result.isSuccess) R.string.checkpoint_saved else R.string.checkpoint_failed, Toast.LENGTH_LONG,
+                        ).show()
+                    }
+                }
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
     }
 
     /** Starts drawing an area. The layers to copy from are fixed now, so the scope can't drift. */
@@ -494,6 +531,10 @@ class EditorActivity : Activity() {
                 spread.add(GROUP_DISTRIBUTE, Distribution.HORIZONTAL.ordinal, 0, R.string.distribute_horizontal)
                 spread.add(GROUP_DISTRIBUTE, Distribution.VERTICAL.ordinal, 1, R.string.distribute_vertical)
             }
+            if (selected.size == 1) {
+                menu.add(0, ACTION_PRECISION, 3, R.string.action_precision)
+                menu.add(0, ACTION_OPACITY, 3, R.string.action_opacity)
+            }
             menu.add(0, ACTION_MAKE_STICKER, 4, R.string.action_make_sticker)
             menu.add(0, ACTION_SAVE_STICKER, 5, R.string.action_save_sticker)
             if (singleGroup != null) {
@@ -520,6 +561,12 @@ class EditorActivity : Activity() {
                     ACTION_GROUP -> groupSelection()
                     ACTION_UNGROUP -> singleGroup?.let(::ungroup)
                     ACTION_EDIT_GROUP -> singleGroup?.let { g -> touch.enterScope(g.id) }
+                    ACTION_OPACITY -> selected.singleOrNull()?.let(::askOpacity)
+                    ACTION_PRECISION -> selected.singleOrNull()?.let { layer ->
+                        PrecisionSheet.show(this@EditorActivity, layer.transform) { typed ->
+                            session?.let { s -> s.commit(TransformLayers.of(s.document, mapOf(layer.id to typed), "Place")) }
+                        }
+                    }
                     ACTION_MAKE_STICKER -> makeSticker()
                     ACTION_SAVE_STICKER -> askSaveSticker()
                 }
@@ -678,13 +725,16 @@ class EditorActivity : Activity() {
     private fun refreshSelectionBar() {
         // One button for whatever the selected layer lets you edit.
         val editable = selectedSingle()
-        editTextButton.visibility = if (editable is TextLayer || editable is ShapeLayer) View.VISIBLE else View.GONE
-        if (editable is ShapeLayer) {
-            editTextButton.setText(R.string.selection_edit_shape)
-            editTextButton.contentDescription = getString(R.string.selection_edit_shape_description)
-        } else {
-            editTextButton.setText(R.string.selection_edit_text)
-            editTextButton.contentDescription = getString(R.string.selection_edit_text_description)
+        val (label, description) = when (editable) {
+            is TextLayer -> R.string.selection_edit_text to R.string.selection_edit_text_description
+            is ShapeLayer -> R.string.selection_edit_shape to R.string.selection_edit_shape_description
+            is ImageLayer -> R.string.selection_edit_image to R.string.selection_edit_image_description
+            else -> null to null
+        }
+        editTextButton.visibility = if (label == null) View.GONE else View.VISIBLE
+        if (label != null && description != null) {
+            editTextButton.setText(label)
+            editTextButton.contentDescription = getString(description)
         }
         val count = touch.selectedIds.size
         selectionBar.visibility = if (count == 0) View.GONE else View.VISIBLE
@@ -865,6 +915,38 @@ class EditorActivity : Activity() {
         AppLog.i(TAG, "Added shape $kind")
     }
 
+    private fun editImage(image: ImageLayer) {
+        val asset = session?.document?.assets?.get(image.assetId) ?: return
+        // Edit the layer as it is now, so the crop keeps the picture in place from here.
+        val latest = session?.document?.layer(image.id) as? ImageLayer ?: return
+        ImageSheet.show(this, latest, asset) { edited ->
+            val current = session ?: return@show
+            if (current.document.layer(image.id) != null) {
+                current.commit(UpdateLayer.of(current.document, edited, "Adjust image"))
+            }
+        }
+    }
+
+    /** A see-through slider for the selected layer of any kind. */
+    private fun askOpacity(layer: Layer) {
+        var opacity = layer.opacity
+        val controls = SheetControls(this)
+        controls.slider(
+            getString(R.string.opacity_title), 0.0, 1.0, OPACITY_STEPS, opacity,
+            { getString(R.string.percent_value, (it * 100).toInt()) },
+        ) { opacity = it }
+        AlertDialog.Builder(this)
+            .setTitle(R.string.opacity_title)
+            .setView(controls.view)
+            .setPositiveButton(R.string.text_done) { _, _ ->
+                val current = session ?: return@setPositiveButton
+                val latest = current.document.layer(layer.id) ?: return@setPositiveButton
+                current.commit(UpdateLayer.of(current.document, latest.withOpacity(opacity), "Change opacity"))
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
     private fun editShape(shape: ShapeLayer) {
         val canvas = session?.document?.canvas ?: return
         ShapeSheet.show(this, shape, maxOf(canvas.width, canvas.height).toDouble()) { edited ->
@@ -921,6 +1003,10 @@ class EditorActivity : Activity() {
         private const val ACTION_EDIT_GROUP = 4
         private const val ACTION_MAKE_STICKER = 5
         private const val ACTION_SAVE_STICKER = 6
+        private const val ACTION_OPACITY = 7
+        private const val ACTION_PRECISION = 8
+        private const val MENU_CHECKPOINT = 5
+        private const val OPACITY_STEPS = 100
         private const val DUPLICATE_OFFSET_FRACTION = 0.04
         private const val BYTES_PER_PIXEL = 4
         private const val ADD_IMAGE = 101

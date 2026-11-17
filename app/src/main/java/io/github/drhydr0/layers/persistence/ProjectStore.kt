@@ -84,6 +84,28 @@ class ProjectStore(root: File) {
     }
 
     /**
+     * Saves [manifest] as a new, independent project called [name]: its own copies of the
+     * images it needs, the same document, and the same undo history. The new manifest is
+     * committed last, so an interrupted copy never shows up in the list.
+     */
+    fun saveCopy(manifest: ProjectManifest, name: String, nowMillis: Long): ProjectManifest {
+        val id = newProjectId()
+        val from = assets(manifest.info.id)
+        val to = assets(id)
+        val needed = AssetUsage.referenced(manifest.document, manifest.history) + manifest.document.assets.keys
+        needed.forEach { asset ->
+            if (!from.contains(asset)) throw IOException("Project ${manifest.info.id} is missing image $asset")
+            if (to.importFile(from.file(asset)) != asset) throw IOException("Image $asset changed on disk")
+        }
+        val copy = manifest.copy(info = ProjectInfo(id, name, nowMillis, nowMillis))
+        save(copy)
+        return copy
+    }
+
+    /** Copies a saved project. See [saveCopy]. */
+    fun duplicate(id: String, name: String, nowMillis: Long): ProjectManifest = saveCopy(load(id), name, nowMillis)
+
+    /**
      * Removes images that neither the document nor any retained undo or redo step needs.
      * Call when opening a project, before any import can start. The trimmed manifest is
      * committed before files are deleted, so an interruption only leaves extra files,
@@ -125,6 +147,11 @@ class ProjectStore(root: File) {
     /** Cleans leftovers from interrupted writes. Call once at startup. */
     fun deleteTempFiles() {
         projectsDir.listFiles { f -> f.isDirectory }?.forEach { dir ->
+            // Images without a manifest are a create or copy that never finished.
+            if (!File(dir, MANIFEST).isFile) {
+                dir.deleteRecursively()
+                return@forEach
+            }
             File(dir, MANIFEST + ".tmp").delete()
             File(dir, THUMBNAIL + ".tmp").delete()
             assets(dir.name).deleteTempFiles()

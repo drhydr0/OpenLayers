@@ -3,8 +3,11 @@ package io.github.drhydr0.layers.persistence.format
 import io.github.drhydr0.layers.document.AssetId
 import io.github.drhydr0.layers.document.CanvasSpec
 import io.github.drhydr0.layers.document.Color
+import io.github.drhydr0.layers.document.Crop
 import io.github.drhydr0.layers.document.Document
+import io.github.drhydr0.layers.document.FontFamily
 import io.github.drhydr0.layers.document.GroupLayer
+import io.github.drhydr0.layers.document.ImageAdjustments
 import io.github.drhydr0.layers.document.ImageAsset
 import io.github.drhydr0.layers.document.ImageLayer
 import io.github.drhydr0.layers.document.Layer
@@ -53,7 +56,7 @@ class ManifestException(message: String, cause: Throwable? = null) : Exception(m
 /** Converts [ProjectManifest] to and from the versioned JSON file format. */
 object ManifestCodec {
 
-    const val CURRENT_VERSION = 4
+    const val CURRENT_VERSION = 5
 
     /**
      * Upgrades from version N to N+1, keyed by N. A format change bumps [CURRENT_VERSION]
@@ -66,6 +69,8 @@ object ManifestCodec {
         2 to { obj -> JsonObject(obj + ("formatVersion" to JsonPrimitive(3))) },
         // 3 -> 4 added shape layers; older files simply have none.
         3 to { obj -> JsonObject(obj + ("formatVersion" to JsonPrimitive(4))) },
+        // 4 -> 5 added text styling and image adjustments and crop; older layers use the defaults.
+        4 to { obj -> JsonObject(obj + ("formatVersion" to JsonPrimitive(5))) },
     )
 
     internal val json = Json {
@@ -184,6 +189,8 @@ object ManifestCodec {
         return when (layer) {
             is ImageLayer -> ImageLayerDto(
                 layer.id.value, layer.name, t, layer.opacity, layer.visible, layer.locked, layer.assetId.sha256,
+                layer.adjustments.brightness, layer.adjustments.contrast, layer.adjustments.saturation,
+                layer.crop.left, layer.crop.top, layer.crop.right, layer.crop.bottom,
             )
             is GroupLayer -> GroupLayerDto(
                 layer.id.value, layer.name, t, layer.opacity, layer.visible, layer.locked, layer.children.map(::layerToDto),
@@ -205,6 +212,15 @@ object ManifestCodec {
                 color = colorToHex(layer.style.color),
                 alignment = layer.style.alignment.name.lowercase(),
                 boxWidth = layer.boxWidth,
+                fontFamily = layer.style.fontFamily.name.lowercase(),
+                bold = layer.style.bold,
+                italic = layer.style.italic,
+                lineSpacing = layer.style.lineSpacing,
+                letterSpacing = layer.style.letterSpacing,
+                outlineColor = colorToHex(layer.style.outlineColor),
+                outlineWidth = layer.style.outlineWidth,
+                backgroundColor = colorToHex(layer.style.backgroundColor),
+                shadow = layer.style.shadow,
             )
         }
     }
@@ -214,6 +230,8 @@ object ManifestCodec {
         return when (dto) {
             is ImageLayerDto -> ImageLayer(
                 LayerId(dto.id), dto.name, AssetId(dto.assetId), t, dto.opacity, dto.visible, dto.locked,
+                ImageAdjustments(dto.brightness, dto.contrast, dto.saturation),
+                Crop(dto.cropLeft, dto.cropTop, dto.cropRight, dto.cropBottom),
             )
             is GroupLayerDto -> GroupLayer(
                 LayerId(dto.id), dto.name, dto.children.map(::layerFromDto), t, dto.opacity, dto.visible, dto.locked,
@@ -227,7 +245,13 @@ object ManifestCodec {
             )
             is TextLayerDto -> TextLayer(
                 LayerId(dto.id), dto.name, dto.text,
-                TextStyle(dto.fontSize, colorFromHex(dto.color), alignmentFromName(dto.alignment)),
+                TextStyle(
+                    dto.fontSize, colorFromHex(dto.color), alignmentFromName(dto.alignment),
+                    FontFamily.entries.firstOrNull { it.name.equals(dto.fontFamily, ignoreCase = true) }
+                        ?: throw IllegalArgumentException("unknown font '${dto.fontFamily}'"),
+                    dto.bold, dto.italic, dto.lineSpacing, dto.letterSpacing,
+                    colorFromHex(dto.outlineColor), dto.outlineWidth, colorFromHex(dto.backgroundColor), dto.shadow,
+                ),
                 dto.boxWidth, t, dto.opacity, dto.visible, dto.locked,
             )
         }

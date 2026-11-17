@@ -14,6 +14,7 @@ import io.github.drhydr0.layers.persistence.format.ManifestException
 import io.github.drhydr0.layers.persistence.format.ProjectManifest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -129,6 +130,42 @@ class ProjectStoreTest {
         assertTrue(reopened.document.layers.isEmpty())
         // Pruning again changes nothing.
         assertEquals(pruned, store.pruneAssets(pruned))
+    }
+
+    @Test
+    fun duplicateIsIndependentWithItsOwnImagesAndHistory() {
+        val p = store.create("Card", canvas, 100)
+        val assets = store.assets(p.info.id)
+        val asset = ImageAsset(assets.put("photo".byteInputStream()), "image/png", 10, 10)
+        val history = History(p.document)
+        history.execute(AddLayers.onTop(history.document, ImageLayer(LayerId("a"), "A", asset.id), asset))
+        history.execute(AddLayers.onTop(history.document, TextLayer(LayerId("t"), "T", "Hi", boxWidth = 100.0)))
+        store.save(p.copy(document = history.document, history = history.snapshot()))
+
+        val copy = store.duplicate(p.info.id, "Card copy", 500)
+        assertNotEquals(p.info.id, copy.info.id)
+        assertEquals("Card copy", copy.info.name)
+        assertEquals(history.document, copy.document)
+        assertEquals(copy, store.load(copy.info.id))
+        assertEquals(2, store.list().projects.size)
+
+        // Deleting the original leaves the copy whole, with working undo.
+        store.delete(p.info.id)
+        assertTrue(store.assets(copy.info.id).contains(asset.id))
+        val reopened = History(copy.document, copy.history)
+        assertTrue(reopened.undo() && reopened.undo())
+        assertTrue(reopened.document.layers.isEmpty())
+    }
+
+    @Test
+    fun interruptedCopyIsNotListedAndIsCleanedUp() {
+        store.create("Card", canvas, 100)
+        // A copy that died after copying images, before its manifest was committed.
+        store.assets("half-copy").put("photo".byteInputStream())
+        assertEquals(1, store.list().projects.size)
+        store.deleteTempFiles()
+        assertFalse(File(temp.root, "projects/half-copy").exists())
+        assertEquals(1, store.list().projects.size)
     }
 
     @Test

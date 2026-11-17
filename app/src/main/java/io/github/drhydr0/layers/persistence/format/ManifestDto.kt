@@ -132,6 +132,15 @@ internal data class ImageLayerDto(
     override val visible: Boolean = true,
     override val locked: Boolean = false,
     val assetId: String,
+    /** Since format 5. Each -1 to 1; 0 is unchanged. */
+    val brightness: Double = 0.0,
+    val contrast: Double = 0.0,
+    val saturation: Double = 0.0,
+    /** Since format 5. The visible part as fractions of the image. */
+    val cropLeft: Double = 0.0,
+    val cropTop: Double = 0.0,
+    val cropRight: Double = 1.0,
+    val cropBottom: Double = 1.0,
 ) : LayerDto
 
 /** Since format 4. */
@@ -183,4 +192,14 @@ internal data class TextLayerDto(
     /** "start", "center", or "end". */
     val alignment: String,
     val boxWidth: Double,
+    /** Since format 5: "sans", "serif", "monospace", "casual", or "cursive". */
+    val fontFamily: String = "sans",
+    val bold: Boolean = false,
+    val italic: Boolean = false,
+    val lineSpacing: Double = 1.0,
+    val letterSpacing: Double = 0.0,
+    val outlineColor: String = "#00000000",
+    val outlineWidth: Double = 0.06,
+    val backgroundColor: String = "#00000000",
+    val shadow: Boolean = false,
 ) : LayerDto
