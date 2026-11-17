@@ -3,4 +3,5 @@
     <!-- Over content outside the canvas: visible for repositioning, clearly not exported. -->
     <color name="canvas_outside_dim">#B32B2B2F</color>
     <color name="canvas_edge">#66FFFFFF</color>
+    <color name="selection_accent">#FF2196F3</color>
 </resources>

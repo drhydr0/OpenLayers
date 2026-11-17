@@ -28,6 +28,24 @@
             android:ellipsize="end"
             android:maxLines="1"
             android:textAppearance="?android:attr/textAppearanceMedium" />
+
+        <ImageButton
+            android:id="@+id/editor_undo"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/editor_undo"
+            android:enabled="false"
+            android:src="@drawable/ic_undo" />
+
+        <ImageButton
+            android:id="@+id/editor_redo"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/editor_redo"
+            android:enabled="false"
+            android:src="@drawable/ic_redo" />
     </LinearLayout>
 
     <io.github.drhydr0.layers.render.DocumentView

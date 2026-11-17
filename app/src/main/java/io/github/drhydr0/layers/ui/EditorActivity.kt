@@ -21,6 +21,8 @@ import io.github.drhydr0.layers.document.Transform
 import io.github.drhydr0.layers.history.AddLayers
 import io.github.drhydr0.layers.history.History
 import io.github.drhydr0.layers.history.UpdateLayer
+import io.github.drhydr0.layers.interaction.CanvasTouchController
+import io.github.drhydr0.layers.interaction.HitTest
 import io.github.drhydr0.layers.persistence.SaveQueue
 import io.github.drhydr0.layers.platform.ImageImporter
 import io.github.drhydr0.layers.platform.ImagePicker
@@ -37,6 +39,9 @@ class EditorActivity : Activity() {
 
     /** Null until the project has loaded; tools do nothing before then. */
     private var session: EditorSession? = null
+    private lateinit var touch: CanvasTouchController
+    private lateinit var undoButton: ImageButton
+    private lateinit var redoButton: ImageButton
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -48,6 +53,9 @@ class EditorActivity : Activity() {
             if (session != null) ImagePicker.launch(this, REQUEST_ADD_IMAGE)
         }
         findViewById<Button>(R.id.editor_add_text).setOnClickListener { addText() }
+        undoButton = findViewById<ImageButton>(R.id.editor_undo).apply { setOnClickListener { session?.history?.undo() } }
+        redoButton = findViewById<ImageButton>(R.id.editor_redo).apply { setOnClickListener { session?.history?.redo() } }
+        setUpTouch()
 
         projectId = intent.getStringExtra(EXTRA_PROJECT_ID) ?: run {
             finish()
@@ -82,8 +90,13 @@ class EditorActivity : Activity() {
                     findViewById<TextView>(R.id.editor_title).text = manifest.info.name
                     val history = History(manifest.document)
                     session = EditorSession(manifest.info, history, newSaveQueue(), System::currentTimeMillis)
-                    history.addListener { canvasView.document = it.document }
+                    history.addListener {
+                        canvasView.document = it.document
+                        touch.documentChanged(it.document)
+                        updateUndoRedo(it)
+                    }
                     canvasView.document = history.document
+                    updateUndoRedo(history)
                 }.onFailure {
                     AppLog.e(TAG, "Could not open project $projectId", it)
                     Toast.makeText(this, R.string.editor_open_failed, Toast.LENGTH_LONG).show()
@@ -91,6 +104,39 @@ class EditorActivity : Activity() {
                 }
             }
         }
+    }
+
+    // The controller calls performClick on taps; drags have no click equivalent.
+    @android.annotation.SuppressLint("ClickableViewAccessibility")
+    private fun setUpTouch() {
+        val hitTest = HitTest { doc, layer ->
+            when (layer) {
+                is ImageLayer -> doc.imageLocalBounds(layer)
+                is TextLayer -> canvasView.textLayouts.localBounds(layer)
+            }
+        }
+        touch = CanvasTouchController(
+            view = canvasView,
+            hitTest = hitTest,
+            document = { session?.document },
+            commit = { session?.commit(it) },
+            onSelectionChanged = { id -> AppLog.i(TAG, if (id == null) "Selection cleared" else "Selected a layer") },
+            onEditText = ::editText,
+        )
+        canvasView.setOnTouchListener(touch)
+        // Draws against what's on screen, so handles follow a gesture preview.
+        canvasView.overlay = { c -> canvasView.document?.let { touch.overlay.draw(c, it) } }
+    }
+
+    private fun updateUndoRedo(history: History) {
+        undoButton.isEnabled = history.canUndo
+        undoButton.alpha = if (history.canUndo) 1f else DISABLED_ALPHA
+        undoButton.contentDescription = history.undoLabel
+            ?.let { getString(R.string.editor_undo_action, it) } ?: getString(R.string.editor_undo)
+        redoButton.isEnabled = history.canRedo
+        redoButton.alpha = if (history.canRedo) 1f else DISABLED_ALPHA
+        redoButton.contentDescription = history.redoLabel
+            ?.let { getString(R.string.editor_redo_action, it) } ?: getString(R.string.editor_redo)
     }
 
     private fun newSaveQueue() = SaveQueue(
@@ -122,6 +168,7 @@ class EditorActivity : Activity() {
                         transform = Placement.centeredFit(doc.canvas, asset.width, asset.height),
                     )
                     current.commit(AddLayers.onTop(doc, layer, asset))
+                    touch.select(layer.id)
                     AppLog.i(TAG, "Added image ${asset.width}x${asset.height} ${asset.mimeType}")
                 }.onFailure {
                     AppLog.e(TAG, "Image import failed", it)
@@ -145,6 +192,7 @@ class EditorActivity : Activity() {
                 transform = Transform(position = canvas.bounds.center),
             )
             current.commit(AddLayers.onTop(current.document, layer))
+            touch.select(layer.id)
             AppLog.i(TAG, "Added text layer")
         }
     }
@@ -164,6 +212,7 @@ class EditorActivity : Activity() {
         private const val TAG = "EditorActivity"
         private const val EXTRA_PROJECT_ID = "project_id"
         private const val REQUEST_ADD_IMAGE = 1
+        private const val DISABLED_ALPHA = 0.38f
 
         fun intent(context: Context, projectId: String) =
             Intent(context, EditorActivity::class.java).putExtra(EXTRA_PROJECT_ID, projectId)
