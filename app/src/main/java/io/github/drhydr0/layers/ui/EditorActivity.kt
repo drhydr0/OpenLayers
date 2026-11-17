@@ -4,11 +4,13 @@ import android.app.Activity
 import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
 import android.os.Bundle
 import android.view.View
 import android.widget.Button
 import android.widget.EditText
 import android.widget.ImageButton
+import android.widget.ImageView
 import android.widget.PopupMenu
 import android.widget.ProgressBar
 import android.widget.TextView
@@ -17,8 +19,12 @@ import io.github.drhydr0.layers.LayersApp
 import io.github.drhydr0.layers.R
 import io.github.drhydr0.layers.diagnostics.AppLog
 import io.github.drhydr0.layers.diagnostics.EditorStats
+import io.github.drhydr0.layers.document.CapturePlan
+import io.github.drhydr0.layers.document.CapturePlanner
+import io.github.drhydr0.layers.document.CaptureScope
 import io.github.drhydr0.layers.document.Document
 import io.github.drhydr0.layers.document.GroupLayer
+import io.github.drhydr0.layers.document.ImageAsset
 import io.github.drhydr0.layers.document.ImageLayer
 import io.github.drhydr0.layers.document.Layer
 import io.github.drhydr0.layers.document.LayerId
@@ -33,9 +39,11 @@ import io.github.drhydr0.layers.document.Vec2
 import io.github.drhydr0.layers.history.AddLayers
 import io.github.drhydr0.layers.history.History
 import io.github.drhydr0.layers.history.MoveLayer
+import io.github.drhydr0.layers.history.PlacedLayer
 import io.github.drhydr0.layers.history.RemoveLayers
 import io.github.drhydr0.layers.history.ReplaceLayers
 import io.github.drhydr0.layers.history.UpdateLayer
+import io.github.drhydr0.layers.interaction.AreaSelectionTool
 import io.github.drhydr0.layers.interaction.CanvasTouchController
 import io.github.drhydr0.layers.interaction.HitTest
 import io.github.drhydr0.layers.persistence.SaveQueue
@@ -43,12 +51,15 @@ import io.github.drhydr0.layers.persistence.format.ProjectManifest
 import io.github.drhydr0.layers.platform.GalleryWriter
 import io.github.drhydr0.layers.platform.ImageImporter
 import io.github.drhydr0.layers.platform.ImagePicker
+import io.github.drhydr0.layers.render.Capturer
 import io.github.drhydr0.layers.render.DocumentView
 import io.github.drhydr0.layers.render.ExportOptions
 import io.github.drhydr0.layers.render.Exporter
 import io.github.drhydr0.layers.render.PreviewImages
 import io.github.drhydr0.layers.render.StickerThumbnails
 import io.github.drhydr0.layers.render.ThumbnailRenderer
+import java.io.File
+import java.io.IOException
 import java.util.concurrent.CancellationException
 
 /** The editor for one project: canvas, tools, and saving after every change. */
@@ -68,6 +79,10 @@ class EditorActivity : Activity() {
     private lateinit var selectionBar: View
     private lateinit var editTextButton: Button
     private lateinit var scopeBar: View
+    private lateinit var areaBar: View
+    private lateinit var areaStatus: TextView
+    private var areaChoice: AreaSelectSheet.Choice? = null
+    private var areaLayerIds: Set<LayerId> = emptySet()
     private lateinit var scopeName: TextView
     private lateinit var selectionCount: TextView
     private val saveTracker = SaveTracker()
@@ -201,7 +216,10 @@ class EditorActivity : Activity() {
         )
         canvasView.setOnTouchListener(touch)
         // Draws against what's on screen, so handles follow a gesture preview.
-        canvasView.overlay = { c -> canvasView.document?.let { touch.overlay.draw(c, it) } }
+        canvasView.overlay = { c ->
+            canvasView.document?.let { touch.overlay.draw(c, it) }
+            touch.areaTool?.draw(c)
+        }
     }
 
     /** Exports a snapshot taken now, so edits made while it runs don't change the output. */
@@ -266,10 +284,14 @@ class EditorActivity : Activity() {
         PopupMenu(this, anchor).apply {
             menu.add(0, MENU_FIT, 0, R.string.editor_menu_fit)
             menu.add(0, MENU_HISTORY, 1, R.string.editor_menu_history)
+            menu.add(0, MENU_AREA, 2, R.string.editor_menu_area)
             setOnMenuItemClickListener {
                 when (it.itemId) {
                     MENU_FIT -> canvasView.fitToScreen()
                     MENU_HISTORY -> session?.history?.let { h -> HistorySheet.show(this@EditorActivity, h, h::jumpTo) }
+                    MENU_AREA -> if (session != null) {
+                        AreaSelectSheet.show(this@EditorActivity, touch.selectedIds.size, ::startArea)
+                    }
                 }
                 true
             }
@@ -278,6 +300,10 @@ class EditorActivity : Activity() {
 
     private fun setUpSelectionBar() {
         selectionBar = findViewById(R.id.editor_selection_bar)
+        areaBar = findViewById(R.id.editor_area_bar)
+        areaStatus = findViewById(R.id.editor_area_status)
+        findViewById<Button>(R.id.editor_area_copy).setOnClickListener { copyAreaAsSticker() }
+        findViewById<Button>(R.id.editor_area_cancel).setOnClickListener { endArea() }
         scopeBar = findViewById(R.id.editor_scope_bar)
         scopeName = findViewById(R.id.editor_scope_name)
         selectionCount = findViewById(R.id.editor_selection_count)
@@ -304,6 +330,147 @@ class EditorActivity : Activity() {
             // Locked layers are protected from deletion along with the rest of the selection.
             val ids = touch.selectedIds.filter { current.document.layer(it)?.locked == false }
             if (ids.isNotEmpty()) current.commit(RemoveLayers.of(current.document, ids))
+        }
+    }
+
+    /** Starts drawing an area. The layers to copy from are fixed now, so the scope can't drift. */
+    private fun startArea(choice: AreaSelectSheet.Choice) {
+        areaChoice = choice
+        areaLayerIds = touch.selectedIds
+        touch.areaTool = AreaSelectionTool(canvasView, choice.lasso) { refreshAreaBar() }
+        refreshAreaBar()
+        AppLog.i(TAG, "Area selection started: ${if (choice.lasso) "lasso" else "rectangle"}, ${choice.scope}")
+    }
+
+    private fun endArea() {
+        touch.areaTool = null
+        areaChoice = null
+        refreshAreaBar()
+    }
+
+    private fun refreshAreaBar() {
+        val choice = areaChoice
+        areaBar.visibility = if (choice == null) View.GONE else View.VISIBLE
+        if (choice == null) return
+        val shapeName = getString(if (choice.lasso) R.string.area_shape_lasso else R.string.area_shape_rect)
+        val scopeName = getString(
+            when (choice.scope) {
+                CaptureScope.CANVAS -> R.string.area_status_canvas
+                CaptureScope.ACTIVE_LAYER -> R.string.area_status_active
+                CaptureScope.SELECTED_LAYERS -> R.string.area_status_selected
+            },
+        )
+        areaStatus.text = if (touch.areaTool?.shape == null) {
+            getString(if (choice.lasso) R.string.area_hint_lasso else R.string.area_hint_rect)
+        } else {
+            getString(R.string.area_status, shapeName, scopeName)
+        }
+    }
+
+    /** Renders the area from a snapshot taken now, then shows what the sticker will be. */
+    private fun copyAreaAsSticker() {
+        val choice = areaChoice ?: return
+        val shape = touch.areaTool?.shape
+        val doc = session?.document ?: return
+        if (shape == null) {
+            Toast.makeText(this, R.string.area_empty, Toast.LENGTH_SHORT).show()
+            return
+        }
+        // Same budget as export: the output bitmap may use half the app's memory at most.
+        val maxPixels = Runtime.getRuntime().maxMemory() / 2 / BYTES_PER_PIXEL
+        val plan = CapturePlanner.plan(doc.canvas, shape, choice.scope, maxPixels)
+        if (plan == null) {
+            Toast.makeText(this, R.string.capture_nothing, Toast.LENGTH_LONG).show()
+            return
+        }
+        val source = CapturePlanner.source(doc, choice.scope, areaLayerIds, choice.includeBackground)
+        val capturer = Capturer { app.projects.assets(projectId).file(it) }
+        app.decode.execute {
+            val result = runCatching {
+                val bitmap = capturer.render(source, shape, plan, clipToCanvas = choice.scope == CaptureScope.CANVAS)
+                if (capturer.isBlank(bitmap)) {
+                    bitmap.recycle()
+                    null
+                } else {
+                    bitmap
+                }
+            }
+            runOnUiThread {
+                val bitmap = result.getOrNull()
+                when {
+                    isDestroyed -> bitmap?.recycle()
+                    result.isFailure -> {
+                        AppLog.e(TAG, "Area capture failed", result.exceptionOrNull())
+                        Toast.makeText(this, R.string.capture_failed, Toast.LENGTH_LONG).show()
+                    }
+                    // An empty capture makes no layer and no history entry.
+                    bitmap == null -> Toast.makeText(this, R.string.capture_nothing, Toast.LENGTH_LONG).show()
+                    else -> confirmCapture(bitmap, plan)
+                }
+            }
+        }
+    }
+
+    private fun confirmCapture(bitmap: Bitmap, plan: CapturePlan) {
+        val view = layoutInflater.inflate(R.layout.dialog_capture_preview, null)
+        val reduced = plan.scale < 1.0
+        view.findViewById<TextView>(R.id.capture_summary).text = getString(
+            if (reduced) R.string.capture_summary_reduced else R.string.capture_summary, plan.width, plan.height,
+        )
+        // A screen-sized copy for the dialog: very large bitmaps can't be drawn by a view.
+        val longest = maxOf(bitmap.width, bitmap.height)
+        val preview = if (longest <= PREVIEW_MAX_SIDE) bitmap else Bitmap.createScaledBitmap(
+            bitmap, bitmap.width * PREVIEW_MAX_SIDE / longest, bitmap.height * PREVIEW_MAX_SIDE / longest, true,
+        )
+        view.findViewById<ImageView>(R.id.capture_preview).setImageBitmap(preview)
+        var keep = false
+        AlertDialog.Builder(this)
+            .setTitle(R.string.capture_title)
+            .setView(view)
+            .setPositiveButton(R.string.capture_create) { _, _ ->
+                keep = true
+                storeCapture(bitmap, plan)
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .setOnDismissListener { if (!keep) bitmap.recycle() }
+            .show()
+    }
+
+    /** Stores the picture as a new image and adds it exactly over what it copied. */
+    private fun storeCapture(bitmap: Bitmap, plan: CapturePlan) {
+        val assets = app.projects.assets(projectId)
+        app.io.execute {
+            val result = runCatching {
+                val temp = File.createTempFile("capture", ".png", cacheDir)
+                try {
+                    temp.outputStream().use { out ->
+                        if (!bitmap.compress(Bitmap.CompressFormat.PNG, PNG_QUALITY, out)) throw IOException("Encoding failed")
+                    }
+                    ImageAsset(assets.importFile(temp), "image/png", bitmap.width, bitmap.height)
+                } finally {
+                    temp.delete()
+                    bitmap.recycle()
+                }
+            }
+            runOnUiThread {
+                val current = session ?: return@runOnUiThread
+                result.onSuccess { asset ->
+                    val layer = ImageLayer(
+                        LayerId.random(), getString(R.string.default_image_sticker_name), asset.id, CapturePlanner.placement(plan),
+                    )
+                    val doc = current.document
+                    current.commit(
+                        AddLayers(listOf(PlacedLayer(doc.layers.size, layer)), listOf(asset), AddLayers.CREATE_STICKER),
+                    )
+                    endArea()
+                    touch.enterScope(null)
+                    touch.select(layer.id)
+                    AppLog.i(TAG, "Created image sticker ${asset.width}x${asset.height}")
+                }.onFailure {
+                    AppLog.e(TAG, "Storing the capture failed", it)
+                    if (!isDestroyed) Toast.makeText(this, R.string.capture_failed, Toast.LENGTH_LONG).show()
+                }
+            }
         }
     }
 
@@ -648,8 +815,12 @@ class EditorActivity : Activity() {
         private const val ACTION_MAKE_STICKER = 5
         private const val ACTION_SAVE_STICKER = 6
         private const val DUPLICATE_OFFSET_FRACTION = 0.04
+        private const val BYTES_PER_PIXEL = 4
         private const val MENU_FIT = 1
         private const val MENU_HISTORY = 2
+        private const val MENU_AREA = 3
+        private const val PREVIEW_MAX_SIDE = 1024
+        private const val PNG_QUALITY = 100
         private const val PROGRESS_PADDING = 48
 
         fun intent(context: Context, projectId: String) =

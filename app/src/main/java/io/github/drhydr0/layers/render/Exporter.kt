@@ -53,22 +53,8 @@ class Exporter(private val fileFor: (AssetId) -> File) {
         }
     }
 
-    /** Each image once, at the largest size any visible layer shows it in the output. */
-    private fun decodeImages(doc: Document, scale: Double): Map<AssetId, Bitmap> {
-        val sides = ExportPlanner.largestScales(doc)
-            .mapValues { (id, shown) -> ExportPlanner.decodeSide(doc.assets.getValue(id), shown, scale) }
-        val decoded = mutableMapOf<AssetId, Bitmap>()
-        try {
-            sides.forEach { (id, side) ->
-                checkCancelled()
-                decoded[id] = PreviewImages.decodeBounded(fileFor(id), side, software = true)
-            }
-        } catch (e: Throwable) {
-            decoded.values.forEach(Bitmap::recycle)
-            throw e
-        }
-        return decoded
-    }
+    private fun decodeImages(doc: Document, scale: Double) =
+        OutputImages.decode(doc, scale, fileFor, ::checkCancelled)
 
     private fun checkCancelled() {
         if (cancelled) throw CancellationException("Export cancelled")

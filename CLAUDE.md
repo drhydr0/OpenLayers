@@ -6,7 +6,7 @@ Instructions for Claude Code working in this repository. Read this first in ever
 
 A native Android image editor built around editable layers, text, reusable stickers, and direct touch manipulation. The full product and architecture spec is `docs/image_editor_high_level_design.md`. When this file and the design doc disagree, ask before acting. Do not resolve the conflict silently.
 
-**Current milestone:** Selection tools. Milestone 4 closed after the phone test; the milestone 5 plan is next. Update this line when a milestone's gate is met.
+**Current milestone:** Selection tools. All steps are built; waiting on the phone test in `docs/milestone_5_phone_test.md`. Plan: `docs/milestone_5_selection_tools_plan.md`. Update this line when a milestone's gate is met.
 
 ## How this project is developed
 
