@@ -7,7 +7,11 @@ import io.github.drhydr0.layers.document.Document
  *
  * In memory for now; Milestone 3 makes it persistent.
  */
-class History(initial: Document) {
+class History(
+    initial: Document,
+    saved: SavedHistory = SavedHistory.EMPTY,
+    private val maxSteps: Int = DEFAULT_MAX_STEPS,
+) {
 
     var document: Document = initial
         private set
@@ -19,8 +23,8 @@ class History(initial: Document) {
     var version: Long = 0
         private set
 
-    private val undoStack = ArrayDeque<Command>()
-    private val redoStack = ArrayDeque<Command>()
+    private val undoStack = ArrayDeque(saved.undo.takeLast(maxSteps))
+    private val redoStack = ArrayDeque(saved.redo)
     private val listeners = mutableListOf<(History) -> Unit>()
 
     val canUndo get() = undoStack.isNotEmpty()
@@ -36,6 +40,8 @@ class History(initial: Document) {
         if (command.isNoOp) return false
         document = command.apply(document)
         undoStack.addLast(command)
+        // Dropping the oldest step only shortens how far back undo reaches.
+        while (undoStack.size > maxSteps) undoStack.removeFirst()
         redoStack.clear()
         changed()
         return true
@@ -57,6 +63,15 @@ class History(initial: Document) {
         return true
     }
 
+    /** The stacks as saved with the document, so undo and redo survive a restart. */
+    fun snapshot() = SavedHistory(undoStack.toList(), redoStack.toList())
+
+    /** Actions from oldest to newest: the undo steps, then redo steps in the order redo applies them. */
+    fun labels(): List<String> = undoStack.map { it.label } + redoStack.reversed().map { it.label }
+
+    /** Number of applied steps, i.e. the current position in [labels]. */
+    val position get() = undoStack.size
+
     fun addListener(listener: (History) -> Unit) {
         listeners += listener
     }
@@ -68,5 +83,20 @@ class History(initial: Document) {
     private fun changed() {
         version++
         listeners.toList().forEach { it(this) }
+    }
+
+    companion object {
+        /** Until measured history sizes set a disk budget (M7). */
+        const val DEFAULT_MAX_STEPS = 500
+    }
+}
+
+/**
+ * Undo and redo stacks in stack order: the last undo entry is undone next, and the last
+ * redo entry is redone next.
+ */
+data class SavedHistory(val undo: List<Command> = emptyList(), val redo: List<Command> = emptyList()) {
+    companion object {
+        val EMPTY = SavedHistory()
     }
 }

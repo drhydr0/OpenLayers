@@ -6,6 +6,9 @@ import io.github.drhydr0.layers.document.ImageAsset
 import io.github.drhydr0.layers.document.ImageLayer
 import io.github.drhydr0.layers.document.LayerId
 import io.github.drhydr0.layers.document.TextLayer
+import io.github.drhydr0.layers.history.AddLayers
+import io.github.drhydr0.layers.history.History
+import io.github.drhydr0.layers.persistence.format.ManifestCodec
 import io.github.drhydr0.layers.persistence.format.ManifestException
 import io.github.drhydr0.layers.persistence.format.ProjectManifest
 import org.junit.Assert.assertEquals
@@ -66,6 +69,28 @@ class ProjectStoreTest {
         val next = withText(committed, "t2", "After", 300)
         reopened.save(next)
         assertEquals(next, reopened.load(created.info.id))
+    }
+
+    @Test
+    fun interruptedSaveKeepsDocumentAndHistoryInStep() {
+        val created = store.create("Card", canvas, 100)
+        val history = History(created.document)
+        history.execute(AddLayers.onTop(history.document, TextLayer(LayerId("t1"), "t1", "One", boxWidth = 500.0)))
+        val committed = created.copy(document = history.document, history = history.snapshot())
+        store.save(committed)
+
+        // A second edit dies mid-save: only the temp file has it.
+        history.execute(AddLayers.onTop(history.document, TextLayer(LayerId("t2"), "t2", "Two", boxWidth = 500.0)))
+        val partial = ManifestCodec.encode(created.copy(document = history.document, history = history.snapshot()))
+        File(manifestFile(created.info.id).path + ".tmp").writeText(partial.take(partial.length / 2))
+
+        val loaded = ProjectStore(temp.root).load(created.info.id)
+        assertEquals(committed, loaded)
+        // The recovered history matches the recovered document: one undo returns to empty.
+        val reopened = History(loaded.document, loaded.history)
+        assertTrue(reopened.undo())
+        assertTrue(reopened.document.layers.isEmpty())
+        assertFalse(reopened.canUndo)
     }
 
     @Test

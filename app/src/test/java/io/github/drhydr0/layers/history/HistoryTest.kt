@@ -75,6 +75,44 @@ class HistoryTest {
         assertEquals(3, calls)
     }
 
+    @Test
+    fun restoredHistoryContinuesWhereItLeftOff() {
+        val first = History(empty)
+        first.execute(AddLayers.onTop(first.document, textLayer("a")))
+        first.execute(AddLayers.onTop(first.document, textLayer("b")))
+        first.execute(UpdateLayer.rename(first.document, LayerId("a"), "Title"))
+        first.undo()
+        val afterTwo = first.document
+
+        // A new History from the saved pieces stands in for reopening the app.
+        val reopened = History(first.document, first.snapshot())
+        assertEquals("Add layer", reopened.undoLabel)
+        assertEquals("Rename layer", reopened.redoLabel)
+        assertEquals(listOf("Add layer", "Add layer", "Rename layer"), reopened.labels())
+        assertEquals(2, reopened.position)
+        assertTrue(reopened.redo())
+        assertEquals("Title", reopened.document.requireLayer(LayerId("a")).name)
+        reopened.undo()
+        assertEquals(afterTwo, reopened.document)
+        reopened.undo()
+        reopened.undo()
+        assertEquals(empty, reopened.document)
+    }
+
+    @Test
+    fun oldestStepsAreDroppedBeyondTheCap() {
+        val history = History(empty, maxSteps = 3)
+        repeat(5) { history.execute(AddLayers.onTop(history.document, textLayer("L$it"))) }
+        assertEquals(3, history.snapshot().undo.size)
+        repeat(3) { assertTrue(history.undo()) }
+        assertFalse(history.undo())
+        // The two oldest adds can no longer be undone, and their layers remain.
+        assertEquals(listOf("L0", "L1"), history.document.layers.map { it.id.value })
+        // A saved history longer than the cap keeps its newest steps.
+        val long = SavedHistory(undo = List(5) { UpdateLayer.rename(history.document, LayerId("L0"), "n$it") })
+        assertEquals(2, History(history.document, long, maxSteps = 2).snapshot().undo.size)
+    }
+
     /** Long random edit sessions must undo back to the exact start and redo to the exact end. */
     @Test
     fun randomSessionsUndoAndRedoExactly() {

@@ -13,9 +13,18 @@ import io.github.drhydr0.layers.document.TextLayer
 import io.github.drhydr0.layers.document.TextStyle
 import io.github.drhydr0.layers.document.Transform
 import io.github.drhydr0.layers.document.Vec2
+import io.github.drhydr0.layers.history.AddLayers
+import io.github.drhydr0.layers.history.Command
+import io.github.drhydr0.layers.history.MoveLayer
+import io.github.drhydr0.layers.history.PlacedLayer
+import io.github.drhydr0.layers.history.RemoveLayers
+import io.github.drhydr0.layers.history.SavedHistory
+import io.github.drhydr0.layers.history.TransformLayers
+import io.github.drhydr0.layers.history.UpdateLayer
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -28,7 +37,11 @@ data class ProjectInfo(
     val modifiedAtMillis: Long,
 )
 
-data class ProjectManifest(val info: ProjectInfo, val document: Document)
+data class ProjectManifest(
+    val info: ProjectInfo,
+    val document: Document,
+    val history: SavedHistory = SavedHistory.EMPTY,
+)
 
 /** The manifest can't be read: corrupt, from a newer app, or internally inconsistent. */
 class ManifestException(message: String, cause: Throwable? = null) : Exception(message, cause)
@@ -36,13 +49,16 @@ class ManifestException(message: String, cause: Throwable? = null) : Exception(m
 /** Converts [ProjectManifest] to and from the versioned JSON file format. */
 object ManifestCodec {
 
-    const val CURRENT_VERSION = 1
+    const val CURRENT_VERSION = 2
 
     /**
      * Upgrades from version N to N+1, keyed by N. A format change bumps [CURRENT_VERSION]
      * and adds a step here, so old projects keep opening.
      */
-    private val migrations: Map<Int, (JsonObject) -> JsonObject> = emptyMap()
+    private val migrations: Map<Int, (JsonObject) -> JsonObject> = mapOf(
+        // 1 -> 2 added saved history; a version 1 project simply starts with none.
+        1 to { obj -> JsonObject(obj + ("formatVersion" to JsonPrimitive(2))) },
+    )
 
     private val json = Json {
         classDiscriminator = "type"
@@ -96,6 +112,10 @@ object ManifestCodec {
                 AssetDto(it.id.sha256, it.mimeType, it.width, it.height)
             },
             layers = doc.layers.map(::layerToDto),
+            history = HistoryDto(
+                undo = manifest.history.undo.map(::commandToDto),
+                redo = manifest.history.redo.map(::commandToDto),
+            ),
         )
     }
 
@@ -108,13 +128,49 @@ object ManifestCodec {
                 AssetId(a.id).let { it to ImageAsset(it, a.mimeType, a.width, a.height) }
             },
         )
-        return ProjectManifest(ProjectInfo(p.id, p.name, p.createdAtMillis, p.modifiedAtMillis), document)
+        val history = SavedHistory(dto.history.undo.map(::commandFromDto), dto.history.redo.map(::commandFromDto))
+        return ProjectManifest(ProjectInfo(p.id, p.name, p.createdAtMillis, p.modifiedAtMillis), document, history)
     }
 
+    private fun commandToDto(command: Command): CommandDto = when (command) {
+        is AddLayers -> AddLayersDto(command.placements.map(::placedToDto), command.assets.map(::assetToDto))
+        is RemoveLayers -> RemoveLayersDto(command.removed.map(::placedToDto))
+        is MoveLayer -> MoveLayerDto(command.id.value, command.from, command.to)
+        is TransformLayers -> TransformLayersDto(
+            command.label,
+            command.before.map { (id, before) ->
+                TransformChangeDto(id.value, transformToDto(before), transformToDto(command.after.getValue(id)))
+            },
+        )
+        is UpdateLayer -> UpdateLayerDto(command.label, layerToDto(command.before), layerToDto(command.after))
+        else -> throw IllegalArgumentException("Command ${command::class.simpleName} has no saved form")
+    }
+
+    private fun commandFromDto(dto: CommandDto): Command = when (dto) {
+        is AddLayersDto -> AddLayers(dto.placements.map(::placedFromDto), dto.assets.map(::assetFromDto))
+        is RemoveLayersDto -> RemoveLayers(dto.removed.map(::placedFromDto))
+        is MoveLayerDto -> MoveLayer(LayerId(dto.id), dto.from, dto.to)
+        is TransformLayersDto -> TransformLayers(
+            before = dto.changes.associate { LayerId(it.id) to transformFromDto(it.before) },
+            after = dto.changes.associate { LayerId(it.id) to transformFromDto(it.after) },
+            label = dto.label,
+        )
+        is UpdateLayerDto -> UpdateLayer(layerFromDto(dto.before), layerFromDto(dto.after), dto.label)
+    }
+
+    private fun placedToDto(p: PlacedLayer) = PlacedLayerDto(p.index, layerToDto(p.layer))
+    private fun placedFromDto(p: PlacedLayerDto) = PlacedLayer(p.index, layerFromDto(p.layer))
+    private fun assetToDto(a: ImageAsset) = AssetDto(a.id.sha256, a.mimeType, a.width, a.height)
+    private fun assetFromDto(a: AssetDto) = ImageAsset(AssetId(a.id), a.mimeType, a.width, a.height)
+
+    private fun transformToDto(t: Transform) =
+        TransformDto(t.position.x, t.position.y, t.scaleX, t.scaleY, t.rotationDegrees, t.flipX, t.flipY)
+
+    private fun transformFromDto(t: TransformDto) =
+        Transform(Vec2(t.x, t.y), t.scaleX, t.scaleY, t.rotationDegrees, t.flipX, t.flipY)
+
     private fun layerToDto(layer: Layer): LayerDto {
-        val t = layer.transform.let {
-            TransformDto(it.position.x, it.position.y, it.scaleX, it.scaleY, it.rotationDegrees, it.flipX, it.flipY)
-        }
+        val t = transformToDto(layer.transform)
         return when (layer) {
             is ImageLayer -> ImageLayerDto(
                 layer.id.value, layer.name, t, layer.opacity, layer.visible, layer.locked, layer.assetId.sha256,
@@ -131,9 +187,7 @@ object ManifestCodec {
     }
 
     private fun layerFromDto(dto: LayerDto): Layer {
-        val t = dto.transform.let {
-            Transform(Vec2(it.x, it.y), it.scaleX, it.scaleY, it.rotationDegrees, it.flipX, it.flipY)
-        }
+        val t = transformFromDto(dto.transform)
         return when (dto) {
             is ImageLayerDto -> ImageLayer(
                 LayerId(dto.id), dto.name, AssetId(dto.assetId), t, dto.opacity, dto.visible, dto.locked,
