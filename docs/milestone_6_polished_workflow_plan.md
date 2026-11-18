@@ -1,5 +1,7 @@
 # Milestone 6 plan: Polished workflow
 
+Closed on 2026-11-18 after the developer's phone test and feedback round 1 (`feedback_round_1.md`).
+
 Goal from CLAUDE.md: shapes, text styling, image adjustments, snapping, alignment, distribution, accessibility.
 
 Built on 2026-11-17, at the developer's request for speed, before the milestone 5 phone test was run. Both tests are still open.
