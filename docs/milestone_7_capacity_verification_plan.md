@@ -17,6 +17,20 @@ For 300 layers and 1,000 undo steps: project file about 2.5 MB; save about 0.1 t
 
 A phone is slower than this machine, so these numbers only show the design has room. The one-file save (document and history together) stays; an append-only history journal is not needed at this size.
 
+## Measured on the Pixel 9 Pro (2026-11-17, build 73, commit 77819a6b20ab)
+
+| Measurement | Result |
+| --- | --- |
+| Create the 300-layer, 1,000-step test project | 0.9 s |
+| Export a 230-layer project at 200% | 2.6 s |
+| Export a 4320 px image at 200% (8640 px) | 5 s |
+| Export an 8192 px image at 200% (16384 px, about 1 GB of pixels) | 15 s |
+| Import a 6144 × 8160 photo | Works |
+| Free phone memory during the run | 2.1 GB |
+| App Java memory right after building the test project | 253.5 of 256 MB |
+
+The Java memory reading was close to the app's limit. It was taken right after building the test project, so part of it was likely uncollected garbage. Two changes followed: the diagnostics screen now clears garbage before measuring, and the app asks for Android's large memory pool (`largeHeap`, about 512 MB on this phone), as image editors commonly do.
+
 ## Still to measure on the Pixel
 
 `docs/milestone_7_phone_test.md` covers what only the phone can show: how the editor feels with 300 layers, memory in the diagnostics report, and export time and success at each size. The design doc asks that capacity is not claimed before these are recorded.
