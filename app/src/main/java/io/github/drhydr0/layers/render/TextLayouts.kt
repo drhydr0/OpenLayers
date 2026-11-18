@@ -6,8 +6,8 @@ import android.text.Layout
 import android.text.StaticLayout
 import android.text.TextPaint
 import android.util.LruCache
-import io.github.drhydr0.layers.document.Rect
 import io.github.drhydr0.layers.document.FontFamily
+import io.github.drhydr0.layers.document.Rect
 import io.github.drhydr0.layers.document.TextAlignment
 import io.github.drhydr0.layers.document.TextLayer
 import io.github.drhydr0.layers.document.TextStyle
@@ -72,22 +72,7 @@ class TextLayouts(maxEntries: Int = 256) {
         return Rect(box.left - pad, box.top - pad, box.right + pad, box.bottom + pad)
     }
 
-    private fun typefaceFor(style: TextStyle): Typeface {
-        val family = when (style.fontFamily) {
-            FontFamily.SANS -> "sans-serif"
-            FontFamily.SERIF -> "serif"
-            FontFamily.MONOSPACE -> "monospace"
-            FontFamily.CASUAL -> "casual"
-            FontFamily.CURSIVE -> "cursive"
-        }
-        val weight = when {
-            style.bold && style.italic -> Typeface.BOLD_ITALIC
-            style.bold -> Typeface.BOLD
-            style.italic -> Typeface.ITALIC
-            else -> Typeface.NORMAL
-        }
-        return Typeface.create(family, weight)
-    }
+    private fun typefaceFor(style: TextStyle): Typeface = Fonts.typeface(style.fontFamily, style.bold, style.italic)
 
     private fun TextAlignment.toLayoutAlignment() = when (this) {
         TextAlignment.START -> Layout.Alignment.ALIGN_NORMAL

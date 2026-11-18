@@ -139,4 +139,49 @@ class GestureMathTest {
         assertEquals(a2.rotationDegrees, b2.rotationDegrees, EPS)
         assertEquals(2.0, a2.scaleX, EPS)
     }
+
+    @Test
+    fun cornerResizeKeepsTheOppositeCornerFixedAndChangesBothAxesFreely() {
+        val box = io.github.drhydr0.layers.document.Rect.centered(100.0, 50.0)
+        val t = Transform(position = Vec2(200.0, 200.0), scaleX = 1.0, scaleY = 1.0, rotationDegrees = 90.0)
+        val anchor = t.toMatrix().map(Vec2(-50.0, -25.0))
+        // Bottom-right handle. With 90 degrees, local +x points down and local +y points left.
+        val r = GestureMath.resizeFromHandle(t, box, 1, 1, anchor + Vec2(-100.0, 300.0), 4.0)
+        assertEquals(3.0, r.scaleX, EPS)
+        assertEquals(2.0, r.scaleY, EPS)
+        assertVec(anchor, r.toMatrix().map(Vec2(-50.0, -25.0)))
+        assertEquals(90.0, r.rotationDegrees, EPS)
+    }
+
+    @Test
+    fun sideResizeChangesOneAxisOnly() {
+        val box = io.github.drhydr0.layers.document.Rect.centered(100.0, 50.0)
+        val t = Transform(position = Vec2(0.0, 0.0), scaleX = 2.0, scaleY = 2.0)
+        // Left side handle at x = -100 on the canvas; drag it to -300.
+        val r = GestureMath.resizeFromHandle(t, box, -1, 0, Vec2(-300.0, 999.0), 4.0)
+        assertEquals(4.0, r.scaleX, EPS)
+        assertEquals(2.0, r.scaleY, EPS)
+        // The right edge (x = 100) stays put.
+        assertVec(Vec2(100.0, 0.0), r.toMatrix().map(Vec2(50.0, 0.0)))
+    }
+
+    @Test
+    fun resizePastTheFixedSideStopsAtTheMinimumAndKeepsFlips() {
+        val box = io.github.drhydr0.layers.document.Rect.centered(100.0, 100.0)
+        val flipped = Transform(position = Vec2(0.0, 0.0), flipX = true)
+        // With flipX, the local right handle sits on the canvas left. Drag it across to the other side.
+        val r = GestureMath.resizeFromHandle(flipped, box, 1, 0, Vec2(500.0, 0.0), 4.0)
+        assertEquals(0.04, r.scaleX, EPS)
+        assertEquals(true, r.flipX)
+    }
+
+    @Test
+    fun resizeWorksForBoxesNotCenteredOnTheOrigin() {
+        // A group's box can sit off-center: the fixed corner must still stay put.
+        val box = io.github.drhydr0.layers.document.Rect(10.0, 20.0, 110.0, 70.0)
+        val t = Transform(position = Vec2(50.0, 60.0), scaleX = 1.5, scaleY = 1.5, rotationDegrees = 30.0)
+        val fixed = t.toMatrix().map(Vec2(10.0, 20.0))
+        val r = GestureMath.resizeFromHandle(t, box, 1, 1, fixed + Vec2(200.0, 200.0), 4.0)
+        assertVec(fixed, r.toMatrix().map(Vec2(10.0, 20.0)))
+    }
 }

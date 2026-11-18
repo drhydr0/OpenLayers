@@ -13,43 +13,63 @@ import kotlin.math.roundToInt
 /** Brightness, contrast, saturation, flip, and crop for an image layer. One undo step on Done. */
 object ImageSheet {
 
-    fun show(activity: Activity, layer: ImageLayer, asset: ImageAsset, onDone: (ImageLayer) -> Unit) {
+    fun show(
+        activity: Activity,
+        layer: ImageLayer,
+        asset: ImageAsset,
+        onPreview: (ImageLayer) -> Unit,
+        onClose: () -> Unit,
+        onDone: (ImageLayer) -> Unit,
+    ) {
         var adjustments = layer.adjustments
+        var opacity = layer.opacity
         var flipX = layer.transform.flipX
         var flipY = layer.transform.flipY
         val trims = doubleArrayOf(layer.crop.left, layer.crop.top, 1 - layer.crop.right, 1 - layer.crop.bottom)
 
         val controls = SheetControls(activity)
+        // Declared before the controls so each one can show its change on the canvas.
+        var preview: () -> Unit = {}
         fun percent(v: Double) = activity.getString(R.string.percent_signed, (v * 100).roundToInt())
         fun trimmed(v: Double) = activity.getString(R.string.percent_value, (v * 100).roundToInt())
 
         controls.slider(activity.getString(R.string.image_brightness), -1.0, 1.0, STEPS, adjustments.brightness, ::percent) {
             adjustments = adjustments.copy(brightness = it)
+            preview()
         }
         controls.slider(activity.getString(R.string.image_contrast), -1.0, 1.0, STEPS, adjustments.contrast, ::percent) {
             adjustments = adjustments.copy(contrast = it)
+            preview()
         }
         controls.slider(activity.getString(R.string.image_saturation), -1.0, 1.0, STEPS, adjustments.saturation, ::percent) {
             adjustments = adjustments.copy(saturation = it)
+            preview()
         }
-        controls.checkBox(activity.getString(R.string.image_flip_horizontal), flipX) { flipX = it }
-        controls.checkBox(activity.getString(R.string.image_flip_vertical), flipY) { flipY = it }
+        controls.checkBox(activity.getString(R.string.image_flip_horizontal), flipX) { flipX = it; preview() }
+        controls.checkBox(activity.getString(R.string.image_flip_vertical), flipY) { flipY = it; preview() }
         controls.label(activity.getString(R.string.image_crop_label))
         listOf(R.string.image_crop_left, R.string.image_crop_top, R.string.image_crop_right, R.string.image_crop_bottom)
             .forEachIndexed { i, title ->
-                controls.slider(activity.getString(title), 0.0, MAX_TRIM, TRIM_STEPS, trims[i], ::trimmed) { trims[i] = it }
+                controls.slider(activity.getString(title), 0.0, MAX_TRIM, TRIM_STEPS, trims[i], ::trimmed) { trims[i] = it; preview() }
             }
+
+        controls.slider(
+            activity.getString(R.string.opacity_title), 0.0, 1.0, STEPS / 2, opacity,
+            { activity.getString(R.string.percent_value, (it * 100).roundToInt()) },
+        ) { opacity = it; preview() }
 
         fun result(): ImageLayer {
             val crop = ImageEdits.cropFromTrims(trims[0], trims[1], trims[2], trims[3])
             val recropped = ImageEdits.recrop(layer, asset, crop)
             return recropped.copy(
                 adjustments = adjustments,
+                opacity = opacity,
                 transform = recropped.transform.copy(flipX = flipX, flipY = flipY),
             )
         }
 
-        AlertDialog.Builder(activity)
+        preview = { onPreview(result()) }
+        val dialog = AlertDialog.Builder(activity)
             .setTitle(R.string.image_edit_title)
             .setView(controls.view)
             .setPositiveButton(R.string.text_done) { _, _ -> onDone(result()) }
@@ -64,7 +84,9 @@ object ImageSheet {
                 )
             }
             .setNegativeButton(android.R.string.cancel, null)
+            .setOnDismissListener { onClose() }
             .show()
+        LiveSheet.style(activity, dialog)
     }
 
     private const val STEPS = 200

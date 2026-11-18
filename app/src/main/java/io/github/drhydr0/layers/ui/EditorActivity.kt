@@ -53,6 +53,7 @@ import io.github.drhydr0.layers.interaction.AreaSelectionTool
 import io.github.drhydr0.layers.interaction.CanvasTouchController
 import io.github.drhydr0.layers.persistence.SaveQueue
 import io.github.drhydr0.layers.persistence.format.ProjectManifest
+import io.github.drhydr0.layers.platform.FreeMemory
 import io.github.drhydr0.layers.platform.GalleryWriter
 import io.github.drhydr0.layers.platform.ImageImporter
 import io.github.drhydr0.layers.platform.ImagePicker
@@ -83,6 +84,12 @@ class EditorActivity : Activity() {
     private lateinit var redoButton: ImageButton
     private lateinit var saveStatus: TextView
     private lateinit var selectionBar: View
+    private lateinit var multiButton: Button
+    private lateinit var nudgeBar: View
+    private lateinit var mainBar: View
+    private lateinit var nudgeStepButton: Button
+    private var nudgeStep = 1.0
+    private var nudgeOffset = Vec2.ZERO
     private lateinit var editTextButton: Button
     private lateinit var scopeBar: View
     private lateinit var areaBar: View
@@ -206,6 +213,7 @@ class EditorActivity : Activity() {
                 refreshScopeBar()
                 refreshLayers()
             },
+            onMultiSelectChanged = { refreshMultiButton() },
         )
         canvasView.setOnTouchListener(touch)
         // Draws against what's on screen, so handles follow a gesture preview.
@@ -277,7 +285,6 @@ class EditorActivity : Activity() {
         PopupMenu(this, anchor).apply {
             menu.add(0, MENU_FIT, 0, R.string.editor_menu_fit)
             menu.add(0, MENU_HISTORY, 1, R.string.editor_menu_history)
-            menu.add(0, MENU_AREA, 2, R.string.editor_menu_area)
             menu.add(0, MENU_CHECKPOINT, 4, R.string.editor_menu_checkpoint)
             menu.add(0, MENU_SNAPPING, 3, R.string.editor_menu_snapping).apply {
                 isCheckable = true
@@ -289,9 +296,6 @@ class EditorActivity : Activity() {
                     MENU_HISTORY -> session?.history?.let { h -> HistorySheet.show(this@EditorActivity, h, h::jumpTo) }
                     MENU_SNAPPING -> touch.snappingEnabled = !touch.snappingEnabled
                     MENU_CHECKPOINT -> askCheckpoint()
-                    MENU_AREA -> if (session != null) {
-                        AreaSelectSheet.show(this@EditorActivity, touch.selectedIds.size, ::startArea)
-                    }
                 }
                 true
             }
@@ -307,14 +311,24 @@ class EditorActivity : Activity() {
         scopeBar = findViewById(R.id.editor_scope_bar)
         scopeName = findViewById(R.id.editor_scope_name)
         selectionCount = findViewById(R.id.editor_selection_count)
-        val multi = findViewById<Button>(R.id.editor_multiselect)
-        multi.setOnClickListener {
-            touch.multiSelectMode = !touch.multiSelectMode
-            multi.isActivated = touch.multiSelectMode
-            multi.contentDescription = getString(
-                if (touch.multiSelectMode) R.string.editor_multiselect_on else R.string.editor_multiselect_off,
-            )
+        multiButton = findViewById(R.id.editor_multiselect)
+        multiButton.setOnClickListener { touch.multiSelectMode = !touch.multiSelectMode }
+        findViewById<Button>(R.id.editor_select_area).setOnClickListener {
+            if (session != null) AreaSelectSheet.show(this, touch.selectedIds.size, ::startArea)
         }
+        nudgeBar = findViewById(R.id.editor_nudge_bar)
+        mainBar = findViewById(R.id.editor_main_bar)
+        nudgeStepButton = findViewById(R.id.editor_nudge_step)
+        nudgeStepButton.setOnClickListener {
+            nudgeStep = if (nudgeStep == 1.0) NUDGE_BIG else 1.0
+            refreshNudgeStep()
+        }
+        listOf(
+            R.id.editor_nudge_left to Vec2(-1.0, 0.0), R.id.editor_nudge_right to Vec2(1.0, 0.0),
+            R.id.editor_nudge_up to Vec2(0.0, -1.0), R.id.editor_nudge_down to Vec2(0.0, 1.0),
+        ).forEach { (id, direction) -> findViewById<View>(id).setOnClickListener { nudge(direction) } }
+        findViewById<Button>(R.id.editor_nudge_done).setOnClickListener { endNudge(commit = true) }
+        findViewById<Button>(R.id.editor_nudge_cancel).setOnClickListener { endNudge(commit = false) }
         findViewById<Button>(R.id.editor_selection_actions).setOnClickListener(::showSelectionActions)
         findViewById<Button>(R.id.editor_scope_exit).setOnClickListener {
             // One level out at a time, so nested groups step back the way they were entered.
@@ -329,7 +343,8 @@ class EditorActivity : Activity() {
                 is TextLayer -> editText(layer)
                 is ShapeLayer -> editShape(layer)
                 is ImageLayer -> editImage(layer)
-                else -> Unit
+                is GroupLayer -> editGroup(layer)
+                null -> Unit
             }
         }
         findViewById<Button>(R.id.editor_delete_selection).setOnClickListener {
@@ -418,7 +433,7 @@ class EditorActivity : Activity() {
             return
         }
         // Same budget as export: the output bitmap may use half the app's memory at most.
-        val maxPixels = Runtime.getRuntime().maxMemory() / 2 / BYTES_PER_PIXEL
+        val maxPixels = FreeMemory.bytes(this) / 2 / BYTES_PER_PIXEL
         val plan = CapturePlanner.plan(doc.canvas, shape, choice.scope, maxPixels)
         if (plan == null) {
             Toast.makeText(this, R.string.capture_nothing, Toast.LENGTH_LONG).show()
@@ -531,10 +546,9 @@ class EditorActivity : Activity() {
                 spread.add(GROUP_DISTRIBUTE, Distribution.HORIZONTAL.ordinal, 0, R.string.distribute_horizontal)
                 spread.add(GROUP_DISTRIBUTE, Distribution.VERTICAL.ordinal, 1, R.string.distribute_vertical)
             }
-            if (selected.size == 1) {
-                menu.add(0, ACTION_PRECISION, 3, R.string.action_precision)
-                menu.add(0, ACTION_OPACITY, 3, R.string.action_opacity)
-            }
+            if (selected.size == 1) menu.add(0, ACTION_PRECISION, 3, R.string.action_precision)
+            menu.add(0, ACTION_NUDGE, 3, R.string.action_nudge)
+            if (touch.scopeId != null) menu.add(0, ACTION_REMOVE_FROM_GROUP, 2, R.string.action_remove_from_group)
             menu.add(0, ACTION_MAKE_STICKER, 4, R.string.action_make_sticker)
             menu.add(0, ACTION_SAVE_STICKER, 5, R.string.action_save_sticker)
             if (singleGroup != null) {
@@ -561,7 +575,8 @@ class EditorActivity : Activity() {
                     ACTION_GROUP -> groupSelection()
                     ACTION_UNGROUP -> singleGroup?.let(::ungroup)
                     ACTION_EDIT_GROUP -> singleGroup?.let { g -> touch.enterScope(g.id) }
-                    ACTION_OPACITY -> selected.singleOrNull()?.let(::askOpacity)
+                    ACTION_NUDGE -> startNudge()
+                    ACTION_REMOVE_FROM_GROUP -> removeFromGroup(touch.selectedIds)
                     ACTION_PRECISION -> selected.singleOrNull()?.let { layer ->
                         PrecisionSheet.show(this@EditorActivity, layer.transform) { typed ->
                             session?.let { s -> s.commit(TransformLayers.of(s.document, mapOf(layer.id to typed), "Place")) }
@@ -709,6 +724,71 @@ class EditorActivity : Activity() {
         touch.setSelection(command.added.mapTo(LinkedHashSet()) { it.layer.id })
     }
 
+    /**
+     * Nudge mode: everything but the canvas and the arrow bar steps aside, and each tap
+     * moves the selection by one (or ten) canvas pixels, shown live. Done saves it as one
+     * undo step; Cancel puts it back.
+     */
+    private fun startNudge() {
+        if (touch.selectedIds.isEmpty()) return
+        nudgeOffset = Vec2.ZERO
+        mainBar.visibility = View.GONE
+        selectionBar.visibility = View.GONE
+        layersContainer.visibility = View.GONE
+        nudgeBar.visibility = View.VISIBLE
+        refreshNudgeStep()
+    }
+
+    private fun refreshNudgeStep() {
+        nudgeStepButton.text = getString(R.string.nudge_step, nudgeStep.toInt())
+    }
+
+    private fun nudge(direction: Vec2) {
+        val doc = session?.document ?: return
+        nudgeOffset += direction * nudgeStep
+        canvasView.document = movedSelection(doc, nudgeOffset).fold(doc) { d, (id, t) ->
+            d.withLayerReplaced(d.requireLayer(id).withTransform(t))
+        }
+    }
+
+    /** The selected, unlocked layers moved by [offset] canvas pixels, as new transforms. */
+    private fun movedSelection(doc: Document, offset: Vec2): List<Pair<LayerId, Transform>> =
+        touch.selectedIds.mapNotNull { id ->
+            val layer = doc.layer(id)?.takeIf { !it.locked } ?: return@mapNotNull null
+            id to layer.transform.translatedBy(touch.canvasOffsetToScope(doc, offset))
+        }
+
+    private fun endNudge(commit: Boolean) {
+        val current = session
+        if (commit && current != null && nudgeOffset != Vec2.ZERO) {
+            val moved = movedSelection(current.document, nudgeOffset).toMap()
+            if (moved.isNotEmpty()) current.commit(TransformLayers.of(current.document, moved, "Nudge"))
+        }
+        nudgeOffset = Vec2.ZERO
+        endPreview()
+        nudgeBar.visibility = View.GONE
+        mainBar.visibility = View.VISIBLE
+        refreshSelectionBar()
+    }
+
+    /** Takes the selected layers out of their group, leaving the rest of the group as it is. */
+    private fun removeFromGroup(ids: Collection<LayerId>) {
+        val current = session ?: return
+        val doc = current.document
+        val command = runCatching { ReplaceLayers.removeFromGroup(doc, ids) }.getOrNull() ?: return
+        current.commit(command)
+        val parent = command.added.first().parentId
+        touch.enterScope(parent)
+        touch.setSelection(ids.toSet().intersect(command.added.map { it.layer.id }.toSet()).ifEmpty { command.added.map { it.layer.id }.toSet() })
+    }
+
+    private fun refreshMultiButton() {
+        multiButton.isActivated = touch.multiSelectMode
+        multiButton.contentDescription = getString(
+            if (touch.multiSelectMode) R.string.editor_multiselect_on else R.string.editor_multiselect_off,
+        )
+    }
+
     private fun refreshScopeBar() {
         val doc = session?.document
         val scope = touch.scopeId
@@ -723,19 +803,8 @@ class EditorActivity : Activity() {
     private fun selectedSingle(): Layer? = touch.selectedIds.singleOrNull()?.let { session?.document?.layer(it) }
 
     private fun refreshSelectionBar() {
-        // One button for whatever the selected layer lets you edit.
-        val editable = selectedSingle()
-        val (label, description) = when (editable) {
-            is TextLayer -> R.string.selection_edit_text to R.string.selection_edit_text_description
-            is ShapeLayer -> R.string.selection_edit_shape to R.string.selection_edit_shape_description
-            is ImageLayer -> R.string.selection_edit_image to R.string.selection_edit_image_description
-            else -> null to null
-        }
-        editTextButton.visibility = if (label == null) View.GONE else View.VISIBLE
-        if (label != null && description != null) {
-            editTextButton.setText(label)
-            editTextButton.contentDescription = getString(description)
-        }
+        // One Edit button for whatever single layer is selected; opacity lives in each sheet.
+        editTextButton.visibility = if (selectedSingle() == null) View.GONE else View.VISIBLE
         val count = touch.selectedIds.size
         selectionBar.visibility = if (count == 0) View.GONE else View.VISIBLE
         if (count > 0) selectionCount.text = resources.getQuantityString(R.plurals.selection_count, count, count)
@@ -747,10 +816,16 @@ class EditorActivity : Activity() {
         layersPanel = LayersPanel(
             list = findViewById(R.id.editor_layers_list),
             onSelect = { id -> session?.let { touch.selectInTree(it.document, id, touch.multiSelectMode) } },
-            onMove = { id, to ->
-                val doc = session?.document ?: return@LayersPanel
-                session?.commit(MoveLayer.of(doc, id, to))
+            onLongPress = { id -> session?.let { touch.longPressInTree(it.document, id) } },
+            onDrop = { id, parentId, index ->
+                val current = session ?: return@LayersPanel
+                val doc = current.document
+                // Within the same group it's a reorder; across groups the layer changes group.
+                val command = if (doc.parentOf(id) == parentId) MoveLayer.of(doc, id, index)
+                else runCatching { ReplaceLayers.moveTo(doc, id, parentId, index) }.getOrNull()
+                if (command != null) current.commit(command) else refreshLayers()
             },
+            onRemoveFromGroup = { layer -> removeFromGroup(listOf(layer.id)) },
             onToggleVisible = { layer ->
                 session?.let { it.commit(UpdateLayer.setVisible(it.document, layer.id, !layer.visible)) }
             },
@@ -915,11 +990,21 @@ class EditorActivity : Activity() {
         AppLog.i(TAG, "Added shape $kind")
     }
 
+    /** Shows an edit on the canvas without saving it; [endPreview] puts back what is saved. */
+    private fun previewLayer(layer: Layer) {
+        val doc = session?.document ?: return
+        if (doc.layer(layer.id) != null) canvasView.document = doc.withLayerReplaced(layer)
+    }
+
+    private fun endPreview() {
+        session?.document?.let { canvasView.document = it }
+    }
+
     private fun editImage(image: ImageLayer) {
         val asset = session?.document?.assets?.get(image.assetId) ?: return
         // Edit the layer as it is now, so the crop keeps the picture in place from here.
         val latest = session?.document?.layer(image.id) as? ImageLayer ?: return
-        ImageSheet.show(this, latest, asset) { edited ->
+        ImageSheet.show(this, latest, asset, ::previewLayer, ::endPreview) { edited ->
             val current = session ?: return@show
             if (current.document.layer(image.id) != null) {
                 current.commit(UpdateLayer.of(current.document, edited, "Adjust image"))
@@ -927,29 +1012,34 @@ class EditorActivity : Activity() {
         }
     }
 
-    /** A see-through slider for the selected layer of any kind. */
-    private fun askOpacity(layer: Layer) {
-        var opacity = layer.opacity
+    /** Groups and stickers: opacity, shown live. */
+    private fun editGroup(group: GroupLayer) {
+        var opacity = group.opacity
         val controls = SheetControls(this)
         controls.slider(
             getString(R.string.opacity_title), 0.0, 1.0, OPACITY_STEPS, opacity,
             { getString(R.string.percent_value, (it * 100).toInt()) },
-        ) { opacity = it }
-        AlertDialog.Builder(this)
-            .setTitle(R.string.opacity_title)
+        ) {
+            opacity = it
+            previewLayer(group.withOpacity(it))
+        }
+        val dialog = AlertDialog.Builder(this)
+            .setTitle(R.string.group_edit_title)
             .setView(controls.view)
             .setPositiveButton(R.string.text_done) { _, _ ->
                 val current = session ?: return@setPositiveButton
-                val latest = current.document.layer(layer.id) ?: return@setPositiveButton
+                val latest = current.document.layer(group.id) ?: return@setPositiveButton
                 current.commit(UpdateLayer.of(current.document, latest.withOpacity(opacity), "Change opacity"))
             }
             .setNegativeButton(android.R.string.cancel, null)
+            .setOnDismissListener { endPreview() }
             .show()
+        LiveSheet.style(this, dialog)
     }
 
     private fun editShape(shape: ShapeLayer) {
         val canvas = session?.document?.canvas ?: return
-        ShapeSheet.show(this, shape, maxOf(canvas.width, canvas.height).toDouble()) { edited ->
+        ShapeSheet.show(this, shape, maxOf(canvas.width, canvas.height).toDouble(), ::previewLayer, ::endPreview) { edited ->
             val current = session ?: return@show
             // Keep any move made meanwhile: only the shape's own properties come from the sheet.
             val latest = current.document.layer(shape.id) as? ShapeLayer ?: return@show
@@ -960,20 +1050,32 @@ class EditorActivity : Activity() {
     }
 
     private fun addText() {
-        val canvas = session?.document?.canvas ?: return
+        val doc = session?.document ?: return
         // Sized and placed for the view as it is when Text is tapped.
-        val frame = session?.document?.let(::placementFrame) ?: return
+        val frame = placementFrame(doc)
         val style = TextStyle(fontSize = Placement.defaultFontSize(frame.sizing))
-        TextSheet.show(this, R.string.text_add_title, "", style, Placement.maxFontSize(canvas)) { text, chosen ->
+        fun layerFor(text: String, chosen: TextStyle, opacity: Double, id: LayerId) = TextLayer(
+            id = id,
+            name = getString(R.string.editor_default_text_name),
+            text = text,
+            style = chosen,
+            boxWidth = Placement.defaultTextBoxWidth(frame.sizing),
+            transform = Transform(position = frame.center),
+            opacity = opacity,
+        )
+        val previewId = LayerId.random()
+        TextSheet.show(
+            this, R.string.text_add_title, "", style, 1.0, Placement.maxFontSize(doc.canvas),
+            onPreview = { text, chosen, opacity ->
+                // The new text shows on top while it is being typed; it is added on Done.
+                session?.document?.let {
+                    canvasView.document = it.withLayerInserted(it.layers.size, layerFor(text, chosen, opacity, previewId))
+                }
+            },
+            onClose = ::endPreview,
+        ) { text, chosen, opacity ->
             val current = session ?: return@show
-            val layer = TextLayer(
-                id = LayerId.random(),
-                name = getString(R.string.editor_default_text_name),
-                text = text,
-                style = chosen,
-                boxWidth = Placement.defaultTextBoxWidth(frame.sizing),
-                transform = Transform(position = frame.center),
-            )
+            val layer = layerFor(text, chosen, opacity, LayerId.random())
             current.commit(AddLayers.onTop(current.document, layer))
             touch.enterScope(null)
             touch.select(layer.id)
@@ -984,11 +1086,15 @@ class EditorActivity : Activity() {
     /** Opens the text sheet for an existing text layer; one undo step for the whole edit. */
     fun editText(layer: TextLayer) {
         val canvas = session?.document?.canvas ?: return
-        TextSheet.show(this, R.string.text_edit_title, layer.text, layer.style, Placement.maxFontSize(canvas)) { text, style ->
+        TextSheet.show(
+            this, R.string.text_edit_title, layer.text, layer.style, layer.opacity, Placement.maxFontSize(canvas),
+            onPreview = { text, style, opacity -> previewLayer(layer.copy(text = text, style = style, opacity = opacity)) },
+            onClose = ::endPreview,
+        ) { text, style, opacity ->
             val current = session ?: return@show
             // The layer may have moved or been edited meanwhile: start from its current state.
             val latest = current.document.layer(layer.id) as? TextLayer ?: return@show
-            current.commit(UpdateLayer.editText(current.document, latest.copy(text = text, style = style)))
+            current.commit(UpdateLayer.editText(current.document, latest.copy(text = text, style = style, opacity = opacity)))
         }
     }
 
@@ -1003,7 +1109,9 @@ class EditorActivity : Activity() {
         private const val ACTION_EDIT_GROUP = 4
         private const val ACTION_MAKE_STICKER = 5
         private const val ACTION_SAVE_STICKER = 6
-        private const val ACTION_OPACITY = 7
+        private const val ACTION_NUDGE = 7
+        private const val ACTION_REMOVE_FROM_GROUP = 9
+        private const val NUDGE_BIG = 10.0
         private const val ACTION_PRECISION = 8
         private const val MENU_CHECKPOINT = 5
         private const val OPACITY_STEPS = 100
@@ -1014,7 +1122,6 @@ class EditorActivity : Activity() {
         private const val ADD_STICKER = 103
         private const val MENU_FIT = 1
         private const val MENU_HISTORY = 2
-        private const val MENU_AREA = 3
         private const val MENU_SNAPPING = 4
         private const val GROUP_ALIGN = 10
         private const val GROUP_DISTRIBUTE = 11

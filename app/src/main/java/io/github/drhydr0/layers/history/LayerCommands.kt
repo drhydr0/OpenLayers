@@ -10,6 +10,7 @@ import io.github.drhydr0.layers.document.Stickers
 import io.github.drhydr0.layers.document.TextLayer
 import io.github.drhydr0.layers.document.Transform
 import io.github.drhydr0.layers.document.Vec2
+import io.github.drhydr0.layers.document.selfAndDescendants
 
 /**
  * A layer, the group it sits in ([parentId], null for the top level), and its index there.
@@ -191,6 +192,40 @@ data class ReplaceLayers(
             require(group.children.isNotEmpty()) { "group is empty" }
             val children = Grouping.ungroup(group).mapIndexed { i, child -> PlacedLayer(placed.index + i, child, placed.parentId) }
             return ReplaceLayers(listOf(placed), children, "Ungroup")
+        }
+
+        /**
+         * Moves a layer into another group, or out to the top level, at [index] among
+         * its new siblings (counted after it leaves its old place). It keeps its look
+         * and position on the canvas.
+         */
+        fun moveTo(document: Document, id: LayerId, newParentId: LayerId?, index: Int): ReplaceLayers {
+            val from = PlacedLayer.of(document, id)
+            require(newParentId == null || document.layer(newParentId) is GroupLayer) { "$newParentId is not a group" }
+            require(document.layer(id)?.selfAndDescendants()?.none { it.id == newParentId } ?: false) {
+                "a group can't go inside itself"
+            }
+            val moved = Grouping.reparent(document, from.layer, newParentId)
+            val label = if (newParentId == null) "Move out of group" else "Move into group"
+            return ReplaceLayers(listOf(from), listOf(PlacedLayer(index, moved, newParentId)), label)
+        }
+
+        /**
+         * Takes the given layers out of the group holding them, placing them just above
+         * it, looking the same. If that would leave the group empty, the group goes too.
+         */
+        fun removeFromGroup(document: Document, ids: Collection<LayerId>): ReplaceLayers {
+            val members = placementsOf(document, ids)
+            require(members.isNotEmpty()) { "nothing to remove" }
+            val groupId = members.first().parentId ?: throw IllegalArgumentException("layers are not in a group")
+            require(members.all { it.parentId == groupId }) { "layers must share a group" }
+            val group = PlacedLayer.of(document, groupId)
+            val groupLayer = group.layer as GroupLayer
+            if (members.size == groupLayer.children.size) return ungroup(document, groupId)
+            val added = members.mapIndexed { i, p ->
+                PlacedLayer(group.index + 1 + i, Grouping.reparent(document, p.layer, group.parentId), group.parentId)
+            }
+            return ReplaceLayers(members, added, if (members.size == 1) "Remove from group" else "Remove ${members.size} from group")
         }
 
         private fun countLabel(count: Int) = if (count == 1) "layer" else "$count layers"

@@ -11,6 +11,7 @@ import io.github.drhydr0.layers.document.Layer
 import io.github.drhydr0.layers.document.LayerId
 import io.github.drhydr0.layers.document.Matrix
 import io.github.drhydr0.layers.document.Rect
+import io.github.drhydr0.layers.document.ShapeLayer
 import io.github.drhydr0.layers.document.TextLayer
 import io.github.drhydr0.layers.document.Transform
 import io.github.drhydr0.layers.document.Vec2
@@ -38,9 +39,10 @@ class CanvasTouchController(
     private val onSelectionChanged: (Set<LayerId>) -> Unit,
     private val onEditText: (TextLayer) -> Unit,
     private val onScopeChanged: (LayerId?) -> Unit = {},
+    private val onMultiSelectChanged: (Boolean) -> Unit = {},
 ) : View.OnTouchListener {
 
-    private enum class Mode { NONE, MOVE, CORNER, ROTATE, WIDTH }
+    private enum class Mode { NONE, MOVE, CORNER, RESIZE, ROTATE, WIDTH }
 
     /** In selection order. */
     var selectedIds: Set<LayerId> = emptySet()
@@ -60,6 +62,33 @@ class CanvasTouchController(
 
     /** While on, taps add layers to or remove them from the selection. */
     var multiSelectMode = false
+        set(value) {
+            if (field == value) return
+            field = value
+            onMultiSelectChanged(value)
+        }
+
+    /**
+     * Long press: turns multiselect on and adds the layer, or, when it is already on,
+     * turns it off and keeps only that layer selected.
+     */
+    fun longPress(id: LayerId) {
+        if (multiSelectMode) {
+            multiSelectMode = false
+            select(id)
+        } else {
+            multiSelectMode = true
+            setSelection(selectedIds + id)
+        }
+        view.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+    }
+
+    /** [longPress] for a layer picked anywhere in the tree, entering its group if needed. */
+    fun longPressInTree(doc: Document, id: LayerId) {
+        val parent = doc.ancestors(id)?.lastOrNull()?.id
+        if (parent != scopeId) enterScope(parent)
+        longPress(id)
+    }
 
     /** While on, every touch moves the view instead of editing (canvas navigation mode). */
     var navigationMode = false
@@ -97,6 +126,16 @@ class CanvasTouchController(
     private var moved = false
     private var lastTapTime = 0L
     private var lastTapId: LayerId? = null
+    private var resizeX = 0
+    private var resizeY = 0
+    private var longPressed = false
+    private val longPressRunnable = Runnable {
+        val id = tappedId
+        if (!moved && id != null && startDoc != null) {
+            longPressed = true
+            longPress(id)
+        }
+    }
 
     fun select(id: LayerId?) = setSelection(setOfNotNull(id))
 
@@ -205,11 +244,17 @@ class CanvasTouchController(
         targetIds = targets.map { it.id }
         mode = when {
             targets.isEmpty() -> Mode.NONE
-            handle == SelectionOverlay.Handle.CORNER -> Mode.CORNER
-            handle == SelectionOverlay.Handle.ROTATE -> Mode.ROTATE
-            handle == SelectionOverlay.Handle.WIDTH -> Mode.WIDTH
+            handle?.kind == SelectionOverlay.Handle.CORNER -> Mode.CORNER
+            handle?.kind == SelectionOverlay.Handle.RESIZE -> Mode.RESIZE
+            handle?.kind == SelectionOverlay.Handle.ROTATE -> Mode.ROTATE
+            handle?.kind == SelectionOverlay.Handle.WIDTH -> Mode.WIDTH
             else -> Mode.MOVE
         }
+        resizeX = handle?.sx ?: 0
+        resizeY = handle?.sy ?: 0
+        longPressed = false
+        // Long press only on layers, never on handles, so resizing can start slowly.
+        if (handle == null && hit != null) view.postDelayed(longPressRunnable, ViewConfiguration.getLongPressTimeout().toLong())
         baseTransforms = targets.associate { it.id to it.transform }
         currentTransforms = baseTransforms
         currentWidth = (targets.singleOrNull() as? TextLayer)?.boxWidth ?: 0.0
@@ -228,15 +273,20 @@ class CanvasTouchController(
         for (i in 0 until event.pointerCount) {
             if (i != lifted) basePoints[event.getPointerId(i)] = toScope(event.getX(i), event.getY(i))
         }
-        if (event.actionMasked == MotionEvent.ACTION_POINTER_DOWN) moved = true
+        if (event.actionMasked == MotionEvent.ACTION_POINTER_DOWN) {
+            moved = true
+            view.removeCallbacks(longPressRunnable)
+        }
     }
 
     private fun move(event: MotionEvent) {
         val doc = startDoc ?: return
         if (mode == Mode.NONE) return
+        if (longPressed) return
         if (!moved && hypot(event.x - downX, event.y - downY) < touchSlop) return
         if (!moved) {
             moved = true
+            view.removeCallbacks(longPressRunnable)
             // Dragging an unselected layer selects it; dragging the selection keeps it.
             if (targetIds.any { it !in selectedIds }) setSelection(targetIds.toCollection(LinkedHashSet()))
         }
@@ -258,6 +308,13 @@ class CanvasTouchController(
                 val factor = GestureMath.groupFactor(baseTransforms.values, groupPivot, from, to)
                 currentTransforms = baseTransforms.mapValues { GestureMath.scaleAround(it.value, groupPivot, factor) }
             }
+            Mode.RESIZE -> {
+                val target = doc.layer(targetIds[0]) ?: return
+                val base = baseTransforms.getValue(target.id)
+                currentTransforms = mapOf(
+                    target.id to GestureMath.resizeFromHandle(base, resizeBox(doc, target), resizeX, resizeY, to, MIN_RESIZE),
+                )
+            }
             Mode.ROTATE -> currentTransforms = if (single) {
                 baseTransforms.mapValues { GestureMath.rotateFromHandle(it.value, from, to) }
             } else {
@@ -274,6 +331,11 @@ class CanvasTouchController(
     }
 
     private fun finish(event: MotionEvent) {
+        view.removeCallbacks(longPressRunnable)
+        if (longPressed) {
+            reset()
+            return
+        }
         val doc = startDoc
         if (doc != null && moved && mode != Mode.NONE) {
             commandFor(doc)?.let(commit)
@@ -305,6 +367,7 @@ class CanvasTouchController(
     }
 
     private fun cancel() {
+        view.removeCallbacks(longPressRunnable)
         // Restore the committed document; nothing from the interrupted gesture is kept.
         startDoc?.let { view.document = it }
         reset()
@@ -348,16 +411,38 @@ class CanvasTouchController(
 
     private fun preview(doc: Document): Document = targetIds.fold(doc) { d, id ->
         val layer = d.layer(id) ?: return@fold d
-        val changed = if (mode == Mode.WIDTH && layer is TextLayer) layer.copy(boxWidth = currentWidth)
-        else layer.withTransform(currentTransforms.getValue(id))
-        d.withLayerReplaced(changed)
+        d.withLayerReplaced(previewLayer(layer))
     }
+
+    private fun previewLayer(layer: Layer): Layer = when {
+        mode == Mode.WIDTH && layer is TextLayer -> layer.copy(boxWidth = currentWidth)
+        mode == Mode.RESIZE && layer is ShapeLayer -> {
+            // Shapes change their own size instead of scaling, so outlines keep their thickness.
+            val base = baseTransforms.getValue(layer.id)
+            val next = currentTransforms.getValue(layer.id)
+            layer.copy(
+                width = layer.width * next.scaleX / base.scaleX,
+                height = if (layer.isLine) layer.height else layer.height * next.scaleY / base.scaleY,
+                transform = next.copy(scaleX = base.scaleX, scaleY = base.scaleY),
+            )
+        }
+        else -> layer.withTransform(currentTransforms.getValue(layer.id))
+    }
+
+    /** The box a free resize stretches: a shape's own outline box, otherwise the content box. */
+    private fun resizeBox(doc: Document, layer: Layer): Rect =
+        if (layer is ShapeLayer) Rect.centered(layer.width, layer.height) else hitTest.localBounds(doc, layer)
 
     private fun commandFor(doc: Document): Command? {
         if (targetIds.any { doc.layer(it) == null }) return null
         if (mode == Mode.WIDTH) {
             val text = doc.layer(targetIds[0]) as? TextLayer ?: return null
             return UpdateLayer.of(doc, text.copy(boxWidth = currentWidth), "Resize text box")
+        }
+        if (mode == Mode.RESIZE) {
+            val layer = doc.layer(targetIds[0]) ?: return null
+            return if (layer is ShapeLayer) UpdateLayer.of(doc, previewLayer(layer), "Resize shape")
+            else TransformLayers.of(doc, currentTransforms, "Resize")
         }
         val verb = when (mode) {
             Mode.CORNER -> "Resize"
@@ -390,5 +475,6 @@ class CanvasTouchController(
         // Snap within 8 dp on screen: close enough to mean it, far enough to drag past.
         const val SNAP_FRACTION = 8.0 / GRAB_SLOP_DP
         const val MIN_TEXT_WIDTH = 16.0
+        const val MIN_RESIZE = 4.0
     }
 }

@@ -23,12 +23,14 @@ class ExportPlannerTest {
     }
 
     @Test
-    fun memoryCheckLeavesHalfTheHeap() {
+    fun memoryCheckUsesFreePhoneMemory() {
         val bitmapBytes = 1080L * 1350 * 4
         assertTrue(ExportPlanner.fits(canvas, 1.0, bitmapBytes * 2))
         assertFalse(ExportPlanner.fits(canvas, 1.0, bitmapBytes * 2 - 1))
-        // A 256 MB heap can't take an 8192 x 8192 export (256 MB bitmap).
-        assertFalse(ExportPlanner.fits(CanvasSpec(8192, 8192), 1.0, 256L * 1024 * 1024))
+        // 8640 x 8640 (a 200% export of a 4320 canvas) is 299 MB: fine with 4 GB free.
+        assertTrue(ExportPlanner.fits(CanvasSpec(4320, 4320), 2.0, 4L * 1024 * 1024 * 1024))
+        // Over 2 GB in one image is beyond what Android can hold, whatever is free.
+        assertFalse(ExportPlanner.fits(CanvasSpec(8192, 8192), 3.0, Long.MAX_VALUE))
     }
 
     @Test

@@ -261,6 +261,17 @@ class RenderingDeviceTest {
         assertColor(WHITE, bitmap.getPixel(70, 70))
     }
 
+    @Test
+    fun everyBundledFontLoadsAndDrawsDifferentlyFromTheDefault() {
+        Fonts.init(InstrumentationRegistry.getInstrumentation().targetContext)
+        fun widthOf(family: io.github.drhydr0.layers.document.FontFamily): Float =
+            android.graphics.Paint().apply { typeface = Fonts.typeface(family); textSize = 50f }.measureText("Layers Wq 123")
+        val plain = widthOf(io.github.drhydr0.layers.document.FontFamily.SANS)
+        io.github.drhydr0.layers.document.FontFamily.entries
+            .filter { it.ordinal >= io.github.drhydr0.layers.document.FontFamily.LATO.ordinal && it != io.github.drhydr0.layers.document.FontFamily.CASUAL && it != io.github.drhydr0.layers.document.FontFamily.CURSIVE }
+            .forEach { family -> assertTrue("$family looks like the default font", abs(widthOf(family) - plain) > 0.5f) }
+    }
+
     private companion object {
         const val RED = 0xFFFF0000.toInt()
         const val BLUE = 0xFF0000FF.toInt()

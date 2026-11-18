@@ -35,6 +35,18 @@ object Grouping {
     }
 
     /**
+     * [layer] re-expressed in the coordinates of [newParentId] (null for the top level),
+     * so moving it between groups leaves it exactly where it was on the canvas.
+     */
+    fun reparent(document: Document, layer: Layer, newParentId: LayerId?): Layer {
+        val oldParent = document.ancestors(layer.id)?.lastOrNull()?.id
+        if (oldParent == newParentId) return layer
+        val world = document.matrixOf(oldParent) * layer.transform.toMatrix()
+        val inverse = document.matrixOf(newParentId).inverted() ?: return layer
+        return layer.withTransform((inverse * world).toTransform())
+    }
+
+    /**
      * An independent copy: every layer in the tree gets a new id from [newId]. Image bytes
      * are shared through their asset ids, which is safe because assets never change.
      */

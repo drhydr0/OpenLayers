@@ -178,7 +178,21 @@
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/editor_layers_list"
             android:layout_width="match_parent"
-            android:layout_height="match_parent" />
+            android:layout_height="match_parent"
+            android:paddingTop="56dp"
+            android:clipToPadding="false" />
+
+        <!-- Multiselect lives with the list; long-pressing a layer turns it on or off too. -->
+        <Button
+            android:id="@+id/editor_multiselect"
+            style="?android:attr/borderlessButtonStyle"
+            android:layout_width="wrap_content"
+            android:layout_height="56dp"
+            android:layout_gravity="top|end"
+            android:background="@drawable/layer_row_background"
+            android:contentDescription="@string/editor_multiselect_off"
+            android:paddingHorizontal="16dp"
+            android:text="@string/editor_multiselect" />
 
         <TextView
             android:id="@+id/editor_layers_empty"
@@ -213,9 +227,9 @@
             style="?android:attr/borderlessButtonStyle"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:contentDescription="@string/selection_edit_text_description"
+            android:contentDescription="@string/selection_edit_description"
             android:minHeight="48dp"
-            android:text="@string/selection_edit_text"
+            android:text="@string/selection_edit"
             android:visibility="gone" />
 
         <Button
@@ -237,7 +251,83 @@
             android:text="@string/selection_delete" />
     </LinearLayout>
 
+    <!-- While nudging, only the canvas and these arrows show, so every pixel step is visible. -->
     <LinearLayout
+        android:id="@+id/editor_nudge_bar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:visibility="gone"
+        style="?android:attr/buttonBarStyle">
+
+        <Button
+            android:id="@+id/editor_nudge_cancel"
+            style="?android:attr/buttonBarButtonStyle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:minHeight="56dp"
+            android:text="@string/nudge_cancel" />
+
+        <Button
+            android:id="@+id/editor_nudge_left"
+            style="?android:attr/buttonBarButtonStyle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:contentDescription="@string/nudge_left_description"
+            android:minHeight="56dp"
+            android:text="@string/nudge_left" />
+
+        <Button
+            android:id="@+id/editor_nudge_up"
+            style="?android:attr/buttonBarButtonStyle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:contentDescription="@string/nudge_up_description"
+            android:minHeight="56dp"
+            android:text="@string/nudge_up" />
+
+        <Button
+            android:id="@+id/editor_nudge_down"
+            style="?android:attr/buttonBarButtonStyle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:contentDescription="@string/nudge_down_description"
+            android:minHeight="56dp"
+            android:text="@string/nudge_down" />
+
+        <Button
+            android:id="@+id/editor_nudge_right"
+            style="?android:attr/buttonBarButtonStyle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:contentDescription="@string/nudge_right_description"
+            android:minHeight="56dp"
+            android:text="@string/nudge_right" />
+
+        <Button
+            android:id="@+id/editor_nudge_step"
+            style="?android:attr/buttonBarButtonStyle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:contentDescription="@string/nudge_step_description"
+            android:minHeight="56dp" />
+
+        <Button
+            android:id="@+id/editor_nudge_done"
+            style="?android:attr/buttonBarButtonStyle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:minHeight="56dp"
+            android:text="@string/nudge_done" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/editor_main_bar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
@@ -254,15 +344,14 @@
             android:text="@string/editor_add" />
 
         <Button
-            android:id="@+id/editor_multiselect"
+            android:id="@+id/editor_select_area"
             style="?android:attr/buttonBarButtonStyle"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:background="@drawable/layer_row_background"
-            android:contentDescription="@string/editor_multiselect_off"
+            android:contentDescription="@string/editor_select_area_description"
             android:minHeight="56dp"
-            android:text="@string/editor_multiselect" />
+            android:text="@string/editor_select_area" />
 
         <Button
             android:id="@+id/editor_layers"
