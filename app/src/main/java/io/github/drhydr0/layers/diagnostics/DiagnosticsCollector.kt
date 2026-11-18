@@ -11,6 +11,9 @@ class DiagnosticsCollector(private val context: Context) {
 
     fun collect(): DiagnosticsSnapshot {
         val runtime = Runtime.getRuntime()
+        // Clear leftovers first, so "used" means what the app really holds, not garbage
+        // waiting to be collected. Diagnostics run rarely, so the pause doesn't matter.
+        runtime.gc()
         val memoryInfo = ActivityManager.MemoryInfo()
         context.getSystemService(ActivityManager::class.java)?.getMemoryInfo(memoryInfo)
         return DiagnosticsSnapshot(
