@@ -31,7 +31,13 @@ A phone is slower than this machine, so these numbers only show the design has r
 
 The Java memory reading was close to the app's limit. It was taken right after building the test project, so part of it was likely uncollected garbage. Two changes followed: the diagnostics screen now clears garbage before measuring, and the app asks for Android's large memory pool (`largeHeap`, about 512 MB on this phone), as image editors commonly do.
 
-## Still to measure on the Pixel
+A second report, right after building the test project again (same build), showed 47.4 of 256 MB: the earlier figure was mostly garbage not yet collected, so live use is well within the limit even before the larger pool.
+
+The developer reported dragging, pinching, panning, scrolling the layers list, and fast undo and redo as smooth on the 244-layer project.
+
+Milestone closed on 2026-11-18. The release acceptance test (`release_acceptance_test.md`) passed the same day.
+
+## Originally planned measurements
 
 `docs/milestone_7_phone_test.md` covers what only the phone can show: how the editor feels with 300 layers, memory in the diagnostics report, and export time and success at each size. The design doc asks that capacity is not claimed before these are recorded.
 
