@@ -1,5 +1,7 @@
 # Milestone 5 plan: Selection tools
 
+Closed on 2026-11-18 after the developer's phone test.
+
 Goal from CLAUDE.md: rectangle and lasso with scope, canvas or layer capture, transparent image stickers.
 
 Milestone 4 (Reusable compositions) closed on 2026-11-17 after the developer's phone test.
