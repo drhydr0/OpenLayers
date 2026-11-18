@@ -3,9 +3,7 @@ package io.github.drhydr0.layers.ui
 import android.app.Activity
 import android.app.AlertDialog
 import android.text.InputType
-import android.widget.Button
 import android.widget.EditText
-import android.widget.LinearLayout
 import io.github.drhydr0.layers.R
 import io.github.drhydr0.layers.document.PrecisionInput
 import io.github.drhydr0.layers.document.Transform
@@ -30,28 +28,6 @@ object PrecisionSheet {
         }
         val x = field(R.string.precision_x, transform.position.x)
         val y = field(R.string.precision_y, transform.position.y)
-
-        // Nudge by one canvas pixel: finer than a finger can drag.
-        val nudges = LinearLayout(activity).apply { orientation = LinearLayout.HORIZONTAL }
-        fun nudge(label: Int, description: Int, target: EditText, by: Double) {
-            nudges.addView(
-                Button(activity, null, android.R.attr.borderlessButtonStyle).apply {
-                    text = activity.getString(label)
-                    contentDescription = activity.getString(description)
-                    minimumHeight = (TOUCH_DP * resources.displayMetrics.density).toInt()
-                    layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-                    setOnClickListener {
-                        val now = target.text.toString().replace(',', '.').toDoubleOrNull() ?: return@setOnClickListener
-                        target.setText(format(now + by))
-                    }
-                },
-            )
-        }
-        nudge(R.string.nudge_left, R.string.nudge_left_description, x, -1.0)
-        nudge(R.string.nudge_right, R.string.nudge_right_description, x, 1.0)
-        nudge(R.string.nudge_up, R.string.nudge_up_description, y, -1.0)
-        nudge(R.string.nudge_down, R.string.nudge_down_description, y, 1.0)
-        controls.add(nudges)
 
         val scale = field(R.string.precision_scale, transform.scaleX * 100)
         val rotation = field(R.string.precision_rotation, transform.rotationDegrees)

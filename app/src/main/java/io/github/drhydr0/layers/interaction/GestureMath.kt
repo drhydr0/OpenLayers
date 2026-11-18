@@ -6,6 +6,7 @@
  */
 package io.github.drhydr0.layers.interaction
 
+import io.github.drhydr0.layers.document.Rect
 import io.github.drhydr0.layers.document.Transform
 import io.github.drhydr0.layers.document.Vec2
 import kotlin.math.abs
@@ -73,6 +74,41 @@ object GestureMath {
 
     fun turnDegrees(pivot: Vec2, from: Vec2, to: Vec2): Double =
         angleDegrees(to - pivot) - angleDegrees(from - pivot)
+
+    /**
+     * Free resize from a corner or side handle. [box] is the layer's content box in its own
+     * coordinates; ([sx], [sy]) picks the handle: -1, 0, or 1 per axis (corner: both
+     * non-zero; side: one zero). The opposite corner or side stays fixed on the canvas and
+     * the handle follows the finger, so width and height change independently.
+     */
+    fun resizeFromHandle(start: Transform, box: Rect, sx: Int, sy: Int, finger: Vec2, minSize: Double): Transform {
+        // Signed scales carry the flips, so the math below needs no special cases.
+        val signX = if (start.flipX) -start.scaleX else start.scaleX
+        val signY = if (start.flipY) -start.scaleY else start.scaleY
+        fun pick(s: Int, low: Double, high: Double) = when { s < 0 -> low; s > 0 -> high; else -> (low + high) / 2 }
+        val anchor = Vec2(pick(-sx, box.left, box.right), pick(-sy, box.top, box.bottom))
+        val handle = Vec2(pick(sx, box.left, box.right), pick(sy, box.top, box.bottom))
+        val anchorOnCanvas = start.toMatrix().map(anchor)
+        // The finger relative to the fixed point, in the layer's rotated frame.
+        val d = rotate(finger - anchorOnCanvas, -start.rotationDegrees)
+        fun newScale(s: Int, along: Double, span: Double, current: Double): Double {
+            if (s == 0 || abs(span) < 1e-9) return current
+            val wanted = along / span
+            val minimum = minSize / abs(span)
+            // Dragging past the fixed side stops at the minimum instead of flipping.
+            return if (wanted * current <= 0) kotlin.math.sign(current) * minimum
+            else kotlin.math.sign(current) * abs(wanted).coerceIn(minimum, MAX_SCALE)
+        }
+        val newX = newScale(sx, d.x, handle.x - anchor.x, signX)
+        val newY = newScale(sy, d.y, handle.y - anchor.y, signY)
+        // Keep the anchor where it was: position = anchor on canvas minus the rotated, scaled anchor.
+        val offset = rotate(Vec2(anchor.x * newX, anchor.y * newY), start.rotationDegrees)
+        return start.copy(
+            position = anchorOnCanvas - offset,
+            scaleX = abs(newX),
+            scaleY = abs(newY),
+        )
+    }
 
     /** Corner handle: uniform scale around the layer center, keeping the aspect ratio. */
     fun scaleFromCorner(start: Transform, from: Vec2, to: Vec2): Transform {

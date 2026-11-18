@@ -141,9 +141,9 @@
     <string name="layers_unlock">Unlock %1$s</string>
     <string name="layers_toggle_visible_generic">Show or hide layer</string>
     <string name="layers_toggle_lock_generic">Lock or unlock layer</string>
-    <string name="editor_multiselect">Multi</string>
-    <string name="editor_multiselect_off">Multiselect: off. Tap to select several layers.</string>
-    <string name="editor_multiselect_on">Multiselect: on. Tap layers to add or remove them.</string>
+    <string name="editor_multiselect">Select several</string>
+    <string name="editor_multiselect_off">Select several: off. Tap, or long-press a layer, to select several layers.</string>
+    <string name="editor_multiselect_on">Select several: on. Tap layers to add or remove them; long-press one to select only it.</string>
     <plurals name="selection_count">
         <item quantity="one">%d layer selected</item>
         <item quantity="other">%d layers selected</item>
@@ -191,9 +191,6 @@
     <string name="sticker_delete">Delete</string>
     <string name="sticker_delete_title">Delete %1$s?</string>
     <string name="sticker_delete_message">It will be removed from your collection. Stickers already placed in projects are not affected.</string>
-    <string name="selection_edit_text">Edit text</string>
-    <string name="selection_edit_text_description">Change the words, size, color, or alignment of the selected text</string>
-    <string name="editor_menu_area">Select area…</string>
     <string name="area_title">Select an area</string>
     <string name="area_shape_label">Shape</string>
     <string name="area_shape_rect">Rectangle</string>
@@ -242,8 +239,6 @@
     <string name="shape_ellipse">Ellipse</string>
     <string name="shape_line">Line</string>
     <string name="shape_arrow">Arrow</string>
-    <string name="selection_edit_shape">Edit shape</string>
-    <string name="selection_edit_shape_description">Change the size, fill, or outline of the selected shape</string>
     <string name="shape_edit_title">Edit shape</string>
     <string name="shape_fill">Fill</string>
     <string name="shape_outline_color">Outline color</string>
@@ -269,7 +264,11 @@
     <string name="distribute_vertical">Down (top to bottom)</string>
     <string name="editor_menu_snapping">Snap while dragging</string>
     <!-- %1$s = control name, %2$s = its current value -->
-    <string name="sheet_slider_heading">%1$s: %2$s</string>
+    <string name="sheet_slider_heading">%1$s: %2$s ✎</string>
+    <!-- %1$s = the control's name -->
+    <string name="sheet_type_value_description">%1$s. Tap to type an exact value.</string>
+    <!-- %1$s and %2$s = smallest and largest allowed value -->
+    <string name="sheet_type_value_range">From %1$s to %2$s</string>
     <string name="percent_signed">%1$+d%%</string>
     <string name="percent_value">%1$d%%</string>
     <string name="times_value">%1$.1f×</string>
@@ -280,6 +279,20 @@
     <string name="font_monospace">Monospace</string>
     <string name="font_casual">Casual</string>
     <string name="font_cursive">Handwriting</string>
+    <string name="font_sans_light">Sans Light</string>
+    <string name="font_sans_condensed">Sans Condensed</string>
+    <string name="font_sans_black">Sans Black</string>
+    <string name="font_lato">Lato</string>
+    <string name="font_lobster">Lobster</string>
+    <string name="font_pacifico">Pacifico</string>
+    <string name="font_great_vibes">Great Vibes</string>
+    <string name="font_permanent_marker">Permanent Marker</string>
+    <string name="font_bebas_neue">Bebas Neue</string>
+    <string name="font_abril_fatface">Abril Fatface</string>
+    <string name="font_bangers">Bangers</string>
+    <string name="font_special_elite">Special Elite</string>
+    <string name="font_press_start">Press Start</string>
+    <string name="font_creepster">Creepster</string>
     <string name="text_bold">Bold</string>
     <string name="text_italic">Italic</string>
     <string name="text_alignment_label">Alignment</string>
@@ -289,8 +302,6 @@
     <string name="text_outline_width">Outline thickness</string>
     <string name="text_background_color">Background box</string>
     <string name="text_shadow">Shadow</string>
-    <string name="selection_edit_image">Adjust image</string>
-    <string name="selection_edit_image_description">Change brightness, contrast, saturation, flip, or crop of the selected image</string>
     <string name="image_edit_title">Adjust image</string>
     <string name="image_brightness">Brightness</string>
     <string name="image_contrast">Contrast</string>
@@ -303,7 +314,6 @@
     <string name="image_crop_right">Right</string>
     <string name="image_crop_bottom">Bottom</string>
     <string name="image_reset">Reset</string>
-    <string name="action_opacity">Opacity…</string>
     <string name="opacity_title">Opacity</string>
     <string name="action_precision">Position and size…</string>
     <string name="precision_title">Position and size</string>
@@ -340,5 +350,18 @@
     <!-- %1$d = milliseconds -->
     <string name="diagnostics_stress_done">Large test project created in %1$d ms. Open it from the project list.</string>
     <string name="diagnostics_stress_failed">Could not create the test project.</string>
+    <string name="editor_select_area">Select</string>
+    <string name="editor_select_area_description">Select an area of the picture to copy as a sticker</string>
+    <string name="selection_edit">Edit</string>
+    <string name="selection_edit_description">Edit the selected layer: style, size, colors, opacity</string>
+    <string name="group_edit_title">Edit group</string>
+    <string name="action_nudge">Nudge (move by pixels)</string>
+    <string name="action_remove_from_group">Remove from group</string>
+    <string name="layers_remove_from_group">Remove from group</string>
+    <!-- %1$d = pixels moved per tap -->
+    <string name="nudge_step">Step: %1$d px</string>
+    <string name="nudge_step_description">Switch between 1 and 10 pixels per tap</string>
+    <string name="nudge_done">Done</string>
+    <string name="nudge_cancel">Cancel</string>
     <string name="editor_open_failed">Could not open the project.</string>
 </resources>

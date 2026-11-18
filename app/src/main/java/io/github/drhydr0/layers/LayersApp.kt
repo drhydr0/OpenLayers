@@ -5,6 +5,7 @@ import io.github.drhydr0.layers.diagnostics.AppLog
 import io.github.drhydr0.layers.diagnostics.CrashHandler
 import io.github.drhydr0.layers.diagnostics.CrashReportStore
 import io.github.drhydr0.layers.persistence.ProjectStore
+import io.github.drhydr0.layers.render.Fonts
 import io.github.drhydr0.layers.persistence.StickerStore
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -33,6 +34,7 @@ class LayersApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        Fonts.init(this)
         crashReports = CrashReportStore(filesDir)
         CrashHandler.install(crashReports)
         projects = ProjectStore(filesDir)

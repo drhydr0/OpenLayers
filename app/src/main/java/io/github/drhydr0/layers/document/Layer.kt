@@ -42,8 +42,16 @@ data class ImageLayer(
 
 enum class TextAlignment { START, CENTER, END }
 
-/** Typefaces every Android phone has built in, so projects never depend on font files. */
-enum class FontFamily { SANS, SERIF, MONOSPACE, CASUAL, CURSIVE }
+/**
+ * Text fonts: the families every Android phone has built in, plus fonts bundled with the
+ * app, so projects never depend on font files the phone might lack. Saved by name, so
+ * new entries can be added; never rename or remove one.
+ */
+enum class FontFamily {
+    SANS, SANS_LIGHT, SANS_CONDENSED, SANS_BLACK, SERIF, MONOSPACE, LATO, CASUAL, CURSIVE,
+    LOBSTER, PACIFICO, BEBAS_NEUE, PERMANENT_MARKER, PRESS_START, BANGERS, ABRIL_FATFACE,
+    SPECIAL_ELITE, CREEPSTER, GREAT_VIBES,
+}
 
 data class TextStyle(
     /** Canvas pixels at scale 1. */

@@ -10,6 +10,7 @@ import android.widget.SeekBar
 import android.widget.TextView
 import io.github.drhydr0.layers.R
 import io.github.drhydr0.layers.document.CanvasSpec
+import io.github.drhydr0.layers.platform.FreeMemory
 import io.github.drhydr0.layers.render.ExportFormat
 import io.github.drhydr0.layers.render.ExportOptions
 import io.github.drhydr0.layers.render.ExportPlanner
@@ -28,7 +29,7 @@ object ExportSheet {
         val quality = view.findViewById<SeekBar>(R.id.export_quality)
         val transparent = view.findViewById<CheckBox>(R.id.export_transparent)
 
-        val heap = Runtime.getRuntime().maxMemory()
+        val free = FreeMemory.bytes(activity)
         val sizeButtons = ExportPlanner.SCALES.map { scale ->
             val (w, h) = ExportPlanner.outputSize(canvas, scale)
             RadioButton(activity).apply {
@@ -36,7 +37,7 @@ object ExportSheet {
                 minHeight = (MIN_TOUCH_DP * activity.resources.displayMetrics.density).toInt()
                 text = activity.getString(R.string.export_size_option, (scale * 100).toInt(), w, h)
                 // Sizes this phone can't hold in memory are shown but disabled, with the reason.
-                if (!ExportPlanner.fits(canvas, scale, heap)) {
+                if (!ExportPlanner.fits(canvas, scale, free)) {
                     isEnabled = false
                     text = activity.getString(R.string.export_size_too_large, text)
                 }

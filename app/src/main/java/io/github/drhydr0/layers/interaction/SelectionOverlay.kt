@@ -7,9 +7,12 @@ import android.graphics.Path
 import io.github.drhydr0.layers.R
 import io.github.drhydr0.layers.document.Arrange
 import io.github.drhydr0.layers.document.Document
+import io.github.drhydr0.layers.document.GroupLayer
+import io.github.drhydr0.layers.document.ImageLayer
 import io.github.drhydr0.layers.document.Layer
 import io.github.drhydr0.layers.document.LayerId
 import io.github.drhydr0.layers.document.Rect
+import io.github.drhydr0.layers.document.ShapeLayer
 import io.github.drhydr0.layers.document.TextLayer
 import io.github.drhydr0.layers.document.Vec2
 import io.github.drhydr0.layers.render.DocumentView
@@ -26,7 +29,16 @@ class SelectionOverlay(
     private val selectedIds: () -> Set<LayerId>,
     private val scopeId: () -> LayerId? = { null },
 ) {
-    enum class Handle { CORNER, ROTATE, WIDTH }
+    /**
+     * CORNER scales evenly (text and several layers). RESIZE stretches freely from a corner
+     * or side ([sx], [sy] say which: -1, 0, or 1 per axis). ROTATE turns; WIDTH rewraps text.
+     */
+    enum class Handle { CORNER, RESIZE, ROTATE, WIDTH }
+
+    data class HandleHit(val kind: Handle, val sx: Int = 0, val sy: Int = 0)
+
+    /** Shapes, images, and stickers (groups) stretch freely; text keeps its proportions. */
+    fun canStretch(layer: Layer) = layer is ShapeLayer || layer is ImageLayer || layer is GroupLayer
 
     private val density = view.resources.displayMetrics.density
     private val handleRadius = HANDLE_RADIUS_DP * density
@@ -59,23 +71,35 @@ class SelectionOverlay(
     }
 
     /** Screen positions of each handle for the movable [layers]. */
-    private fun handles(doc: Document, layers: List<Layer>): List<Pair<Handle, Vec2>> {
+    private fun handles(doc: Document, layers: List<Layer>): List<Pair<HandleHit, Vec2>> {
         if (layers.isEmpty()) return emptyList()
         val c = box(doc, layers)
         val topMid = mid(c[0], c[1])
         val up = normalize(topMid - mid(c[0], c[2]))
-        val list = c.map { Handle.CORNER to it }.toMutableList()
-        list += Handle.ROTATE to (topMid + up * rotateOffset.toDouble())
-        if (layers.singleOrNull() is TextLayer) list += Handle.WIDTH to mid(c[1], c[2])
+        val single = layers.singleOrNull()
+        val list = mutableListOf<Pair<HandleHit, Vec2>>()
+        // Corners in order top-left, top-right, bottom-right, bottom-left, as the layer sees them.
+        val cornerSigns = listOf(-1 to -1, 1 to -1, 1 to 1, -1 to 1)
+        if (single != null && canStretch(single)) {
+            c.forEachIndexed { i, p -> list += HandleHit(Handle.RESIZE, cornerSigns[i].first, cornerSigns[i].second) to p }
+            list += HandleHit(Handle.RESIZE, 0, -1) to mid(c[0], c[1])
+            list += HandleHit(Handle.RESIZE, 1, 0) to mid(c[1], c[2])
+            list += HandleHit(Handle.RESIZE, 0, 1) to mid(c[2], c[3])
+            list += HandleHit(Handle.RESIZE, -1, 0) to mid(c[3], c[0])
+        } else {
+            c.forEach { list += HandleHit(Handle.CORNER) to it }
+            if (single is TextLayer) list += HandleHit(Handle.WIDTH) to mid(c[1], c[2])
+        }
+        list += HandleHit(Handle.ROTATE) to (topMid + up * rotateOffset.toDouble())
         return list
     }
 
-    fun handleAt(doc: Document, layers: List<Layer>, x: Float, y: Float): Handle? =
+    fun handleAt(doc: Document, layers: List<Layer>, x: Float, y: Float): HandleHit? =
         handles(doc, layers)
             .map { (h, p) -> h to hypot(p.x - x, p.y - y) }
             .filter { it.second <= touchRadius }
             // Rotate and width handles win ties: they're smaller targets near corners.
-            .minWithOrNull(compareBy<Pair<Handle, Double>> { it.second }.thenBy { it.first == Handle.CORNER })
+            .minWithOrNull(compareBy<Pair<HandleHit, Double>> { it.second }.thenBy { it.first.kind == Handle.CORNER || it.first.kind == Handle.RESIZE })
             ?.first
 
     /** Guide lines to show while a drag is snapped; null when not snapping. */
@@ -111,12 +135,21 @@ class SelectionOverlay(
 
         val all = handles(doc, movable)
         val topMid = mid(c[0], c[1])
-        all.firstOrNull { it.first == Handle.ROTATE }?.second?.let {
+        all.firstOrNull { it.first.kind == Handle.ROTATE }?.second?.let {
             canvas.drawLine(topMid.x.toFloat(), topMid.y.toFloat(), it.x.toFloat(), it.y.toFloat(), outlinePaint)
         }
-        all.forEach { (_, p) ->
-            canvas.drawCircle(p.x.toFloat(), p.y.toFloat(), handleRadius, handleFill)
-            canvas.drawCircle(p.x.toFloat(), p.y.toFloat(), handleRadius, handleStroke)
+        all.forEach { (hit, p) ->
+            val x = p.x.toFloat()
+            val y = p.y.toFloat()
+            if (hit.kind == Handle.RESIZE && (hit.sx == 0 || hit.sy == 0)) {
+                // Side handles are small squares, so they read differently from corners.
+                val r = handleRadius * SIDE_HANDLE_SCALE
+                canvas.drawRect(x - r, y - r, x + r, y + r, handleFill)
+                canvas.drawRect(x - r, y - r, x + r, y + r, handleStroke)
+            } else {
+                canvas.drawCircle(x, y, handleRadius, handleFill)
+                canvas.drawCircle(x, y, handleRadius, handleStroke)
+            }
         }
     }
 
@@ -137,6 +170,7 @@ class SelectionOverlay(
 
     private companion object {
         const val HANDLE_RADIUS_DP = 8
+        const val SIDE_HANDLE_SCALE = 0.75f
         // 24 dp radius gives the 48 dp touch target the guidelines ask for.
         const val TOUCH_RADIUS_DP = 24
         const val ROTATE_OFFSET_DP = 36

@@ -36,13 +36,22 @@ object ExportPlanner {
         (canvas.width * scale).roundToInt().coerceAtLeast(1) to (canvas.height * scale).roundToInt().coerceAtLeast(1)
 
     /**
-     * True when the output bitmap fits comfortably in [heapLimitBytes]. Half the heap is
-     * left for decoded images and the encoder, so export fails early instead of crashing.
+     * True when the phone can hold the output. Image pixels live in the phone's general
+     * memory (not the app's small Java heap), so this compares against the memory the
+     * phone reports as free right now, leaving half of it for the decoded photos and
+     * the encoder. A single image is also limited to 2 GB by Android's bitmap format.
      */
-    fun fits(canvas: CanvasSpec, scale: Double, heapLimitBytes: Long): Boolean {
-        val (w, h) = outputSize(canvas, scale)
-        return w.toLong() * h * BYTES_PER_PIXEL <= heapLimitBytes / 2
+    fun fits(canvas: CanvasSpec, scale: Double, freeMemoryBytes: Long): Boolean {
+        val bytes = outputBytes(canvas, scale)
+        return bytes < MAX_BITMAP_BYTES && bytes <= freeMemoryBytes / 2
     }
+
+    fun outputBytes(canvas: CanvasSpec, scale: Double): Long {
+        val (w, h) = outputSize(canvas, scale)
+        return w.toLong() * h * BYTES_PER_PIXEL
+    }
+
+    private const val MAX_BITMAP_BYTES = Int.MAX_VALUE.toLong()
 
     /**
      * Longest side to decode an image at: enough for its largest size in the output, never

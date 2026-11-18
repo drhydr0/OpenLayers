@@ -2,82 +2,77 @@ package io.github.drhydr0.layers.ui
 
 import android.app.Activity
 import android.app.AlertDialog
-import android.view.View
-import android.widget.LinearLayout
-import android.widget.SeekBar
-import android.widget.TextView
 import io.github.drhydr0.layers.R
 import io.github.drhydr0.layers.document.ShapeKind
 import io.github.drhydr0.layers.document.ShapeLayer
 import kotlin.math.roundToInt
 
-/** Edits a shape's size, fill, outline, and corner rounding. One undo step on Done. */
+/** A shape's fill, outline, size, corners, and opacity, shown live. One undo step on Done. */
 object ShapeSheet {
 
     /** [maxSide] is the largest width or height offered, in canvas pixels. */
-    fun show(activity: Activity, shape: ShapeLayer, maxSide: Double, onDone: (ShapeLayer) -> Unit) {
-        val view = activity.layoutInflater.inflate(R.layout.dialog_shape, null)
+    fun show(
+        activity: Activity,
+        shape: ShapeLayer,
+        maxSide: Double,
+        onPreview: (ShapeLayer) -> Unit,
+        onClose: () -> Unit,
+        onDone: (ShapeLayer) -> Unit,
+    ) {
         var edited = shape
-
+        fun change(next: ShapeLayer) {
+            edited = next
+            onPreview(next)
+        }
         val line = shape.isLine
-        view.findViewById<View>(R.id.shape_fill_section).visibility = if (line) View.GONE else View.VISIBLE
-        view.findViewById<View>(R.id.shape_height_section).visibility = if (line) View.GONE else View.VISIBLE
-        view.findViewById<View>(R.id.shape_corner_section).visibility =
-            if (shape.kind == ShapeKind.ROUNDED_RECTANGLE) View.VISIBLE else View.GONE
-        view.findViewById<TextView>(R.id.shape_stroke_color_label)
-            .setText(if (line) R.string.shape_line_color else R.string.shape_outline_color)
-        view.findViewById<TextView>(R.id.shape_width_label_title)
-            .setText(if (line) R.string.shape_length else R.string.shape_width)
+        val controls = SheetControls(activity)
+        fun px(v: Double) = activity.getString(R.string.pixels_value, v.roundToInt())
 
-        ColorSwatches.fill(view.findViewById<LinearLayout>(R.id.shape_fill_colors), shape.fill, allowNone = true) {
-            edited = edited.copy(fill = it)
+        if (!line) {
+            controls.colors(activity.getString(R.string.shape_fill), shape.fill, allowNone = true) { change(edited.copy(fill = it)) }
         }
-        ColorSwatches.fill(view.findViewById<LinearLayout>(R.id.shape_stroke_colors), shape.stroke, allowNone = !line) {
-            edited = edited.copy(stroke = it)
-        }
-
+        controls.colors(
+            activity.getString(if (line) R.string.shape_line_color else R.string.shape_outline_color),
+            shape.stroke, allowNone = !line,
+        ) { change(edited.copy(stroke = it)) }
         val maxStroke = (maxSide / MAX_STROKE_DIVISOR).coerceAtLeast(MIN_SIZE)
-        slider(view, R.id.shape_stroke_width, R.id.shape_stroke_width_value, shape.strokeWidth, if (line) 1.0 else 0.0, maxStroke) {
+        controls.slider(
+            activity.getString(R.string.shape_outline_width), if (line) 1.0 else 0.0, maxStroke,
+            maxStroke.roundToInt().coerceAtLeast(1), shape.strokeWidth, ::px,
+        ) {
             // A line's box grows with its thickness, so its arrow head and touch area fit.
-            edited = if (line) edited.copy(strokeWidth = it, height = it * ShapeLayer.ARROW_HEAD_FACTOR) else edited.copy(strokeWidth = it)
+            change(if (line) edited.copy(strokeWidth = it, height = it * ShapeLayer.ARROW_HEAD_FACTOR) else edited.copy(strokeWidth = it))
         }
-        slider(view, R.id.shape_width, R.id.shape_width_value, shape.width, MIN_SIZE, maxSide) { edited = edited.copy(width = it) }
-        slider(view, R.id.shape_height, R.id.shape_height_value, shape.height, MIN_SIZE, maxSide) {
-            if (!line) edited = edited.copy(height = it)
+        val steps = maxSide.roundToInt().coerceAtLeast(1)
+        controls.slider(
+            activity.getString(if (line) R.string.shape_length else R.string.shape_width), MIN_SIZE, maxSide, steps, shape.width, ::px,
+        ) { change(edited.copy(width = it)) }
+        if (!line) {
+            controls.slider(activity.getString(R.string.shape_height), MIN_SIZE, maxSide, steps, shape.height, ::px) {
+                change(edited.copy(height = it))
+            }
         }
-        slider(view, R.id.shape_corner, R.id.shape_corner_value, shape.cornerRadius, 0.0, maxSide / 2) {
-            edited = edited.copy(cornerRadius = it)
+        if (shape.kind == ShapeKind.ROUNDED_RECTANGLE) {
+            controls.slider(activity.getString(R.string.shape_corner), 0.0, maxSide / 2, steps / 2, shape.cornerRadius, ::px) {
+                change(edited.copy(cornerRadius = it))
+            }
         }
+        controls.slider(
+            activity.getString(R.string.opacity_title), 0.0, 1.0, OPACITY_STEPS, shape.opacity,
+            { activity.getString(R.string.percent_value, (it * 100).roundToInt()) },
+        ) { change(edited.copy(opacity = it)) }
 
-        AlertDialog.Builder(activity)
+        val dialog = AlertDialog.Builder(activity)
             .setTitle(R.string.shape_edit_title)
-            .setView(view)
+            .setView(controls.view)
             .setPositiveButton(R.string.text_done) { _, _ -> onDone(edited) }
             .setNegativeButton(android.R.string.cancel, null)
+            .setOnDismissListener { onClose() }
             .show()
-    }
-
-    /** A whole-pixel slider from [min] to [max] with its value shown beside it. */
-    private fun slider(root: View, barId: Int, valueId: Int, initial: Double, min: Double, max: Double, onChange: (Double) -> Unit) {
-        val bar = root.findViewById<SeekBar>(barId)
-        val label = root.findViewById<TextView>(valueId)
-        bar.max = (max - min).roundToInt().coerceAtLeast(1)
-        bar.progress = (initial - min).roundToInt().coerceIn(0, bar.max)
-        fun show() {
-            label.text = root.context.getString(R.string.pixels_value, (min + bar.progress).roundToInt())
-        }
-        show()
-        bar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(b: SeekBar, progress: Int, fromUser: Boolean) {
-                show()
-                // Only real drags change the shape, so untouched values keep their exact size.
-                if (fromUser) onChange(min + progress)
-            }
-            override fun onStartTrackingTouch(b: SeekBar) = Unit
-            override fun onStopTrackingTouch(b: SeekBar) = Unit
-        })
+        LiveSheet.style(activity, dialog)
     }
 
     private const val MIN_SIZE = 4.0
     private const val MAX_STROKE_DIVISOR = 10.0
+    private const val OPACITY_STEPS = 100
 }

@@ -79,4 +79,33 @@ class ArrangeTest {
         assertTrue(snap.horizontalGuides.isEmpty())
         assertVec(Vec2.ZERO, Arrange.snap(box, listOf(other), threshold = 2.0).offset)
     }
+
+    @Test
+    fun distributeOrdersByCenterAndKeepsTheOuterEdges() {
+        // A wide box whose center is in the middle but whose right edge reaches furthest.
+        val boxes = mapOf(
+            a to Rect(0.0, 0.0, 50.0, 10.0),
+            b to Rect(100.0, 0.0, 150.0, 10.0),
+            c to Rect(200.0, 0.0, 300.0, 10.0),
+        )
+        val moved = Arrange.distribute(boxes, Distribution.HORIZONTAL)
+        // Free space 300 - 200 = 100, so gaps of 50: b's left edge goes to 100. Nothing else moves.
+        assertVec(Vec2.ZERO, moved.getValue(a))
+        assertVec(Vec2.ZERO, moved.getValue(b))
+        assertVec(Vec2.ZERO, moved.getValue(c))
+    }
+
+    @Test
+    fun overlappingBoxesSpaceTheirCentersEvenly() {
+        val boxes = mapOf(
+            a to Rect(0.0, 0.0, 100.0, 10.0),
+            b to Rect(10.0, 0.0, 110.0, 10.0),
+            c to Rect(100.0, 0.0, 200.0, 10.0),
+        )
+        val moved = Arrange.distribute(boxes, Distribution.HORIZONTAL)
+        // Centers 50, 60, 150 become 50, 100, 150.
+        assertVec(Vec2(40.0, 0.0), moved.getValue(b))
+        assertVec(Vec2.ZERO, moved.getValue(a))
+        assertVec(Vec2.ZERO, moved.getValue(c))
+    }
 }

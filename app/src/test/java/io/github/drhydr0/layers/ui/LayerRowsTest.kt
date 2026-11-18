@@ -37,4 +37,40 @@ class LayerRowsTest {
         assertEquals(0, LayerRows.documentIndex(rows, 3))
         assertEquals(0, LayerRows.documentIndex(rows, 4))
     }
+
+    /** Moves the row at [from] to [to], as a drag does, and reads where it lands. */
+    private fun drop(expanded: Set<LayerId>, from: Int, to: Int): Pair<String?, Int> {
+        val rows = LayerRows.flatten(doc, expanded).toMutableList()
+        rows.add(to, rows.removeAt(from))
+        val (parent, index) = LayerRows.dropTarget(doc, rows, to)
+        return parent?.value to index
+    }
+
+    @Test
+    fun dropJustUnderAnOpenGroupGoesInsideOnTop() {
+        // Rows: b, g, g2, g1, a. Drag "a" (row 4) to just under "g" (row 2).
+        assertEquals("g" to 2, drop(setOf(LayerId("g")), 4, 2))
+    }
+
+    @Test
+    fun dropAmongAGroupsChildrenJoinsThatGroup() {
+        // Drag "b" (row 0) to between g2 and g1: under g2, so into g just below g2.
+        assertEquals("g" to 1, drop(setOf(LayerId("g")), 0, 2))
+        // Further down, under g1 (the bottom child): into g at the very bottom.
+        assertEquals("g" to 0, drop(setOf(LayerId("g")), 0, 3))
+    }
+
+    @Test
+    fun dropAtTheTopOrUnderATopLevelRowLeavesTheGroup() {
+        // Drag "g1" (row 3) to the very top.
+        assertEquals(null to 3, drop(setOf(LayerId("g")), 3, 0))
+        // Drag "g2" (row 2) to the bottom, under "a": top level, just below "a".
+        assertEquals(null to 0, drop(setOf(LayerId("g")), 2, 4))
+    }
+
+    @Test
+    fun dropUnderAClosedGroupStaysBesideIt() {
+        // Rows: b, g, a. Drag "b" to under the closed group "g": top level, just below g.
+        assertEquals(null to 1, drop(emptySet(), 0, 1))
+    }
 }

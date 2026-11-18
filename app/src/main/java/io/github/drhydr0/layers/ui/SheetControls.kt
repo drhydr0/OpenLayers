@@ -1,14 +1,19 @@
 package io.github.drhydr0.layers.ui
 
+import android.app.AlertDialog
 import android.content.Context
+import android.text.InputType
 import android.view.View
 import android.widget.CheckBox
+import android.widget.EditText
 import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.SeekBar
 import android.widget.TextView
+import io.github.drhydr0.layers.R
 import io.github.drhydr0.layers.document.Color
+import java.util.Locale
 import kotlin.math.roundToInt
 
 /**
@@ -38,7 +43,9 @@ class SheetControls(private val context: Context) {
 
     /**
      * A slider over [steps] equal steps from [min] to [max]. [format] turns the value into
-     * the text shown beside the title; [onChange] runs only for the user's own drags.
+     * the text shown beside the title; [onChange] runs only for the user's own changes.
+     * Tapping the title opens a box to type an exact value, which is kept exactly rather
+     * than rounded to a slider step.
      */
     fun slider(
         title: String,
@@ -50,28 +57,65 @@ class SheetControls(private val context: Context) {
         onChange: (Double) -> Unit,
     ): SeekBar {
         val heading = label("")
+        var value = initial.coerceIn(min, max)
         val bar = SeekBar(context).apply {
             this.max = steps
-            progress = ((initial - min) / (max - min) * steps).roundToInt().coerceIn(0, steps)
             contentDescription = title
             minimumHeight = dp(TOUCH_DP)
         }
-        fun value() = min + (max - min) * bar.progress / steps
+        fun progressFor(v: Double) = ((v - min) / (max - min) * steps).roundToInt().coerceIn(0, steps)
         fun show() {
-            heading.text = context.getString(io.github.drhydr0.layers.R.string.sheet_slider_heading, title, format(value()))
+            heading.text = context.getString(R.string.sheet_slider_heading, title, format(value))
         }
+        bar.progress = progressFor(value)
         show()
         bar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(b: SeekBar, progress: Int, fromUser: Boolean) {
+                if (!fromUser) return
+                value = min + (max - min) * progress / steps
                 show()
-                if (fromUser) onChange(value())
+                onChange(value)
             }
             override fun onStartTrackingTouch(b: SeekBar) = Unit
             override fun onStopTrackingTouch(b: SeekBar) = Unit
         })
+        heading.minHeight = dp(TOUCH_DP)
+        heading.gravity = android.view.Gravity.CENTER_VERTICAL
+        heading.contentDescription = context.getString(R.string.sheet_type_value_description, title)
+        heading.setOnClickListener {
+            askNumber(title, value, min, max) { typed ->
+                value = typed
+                bar.progress = progressFor(typed)
+                show()
+                onChange(typed)
+            }
+        }
         column.addView(bar)
         return bar
     }
+
+    /** A small box to type an exact number, kept within [min] to [max]. */
+    private fun askNumber(title: String, current: Double, min: Double, max: Double, onValue: (Double) -> Unit) {
+        val input = EditText(context).apply {
+            setText(String.format(Locale.ROOT, "%.2f", current).trimEnd('0').trimEnd('.'))
+            inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL or InputType.TYPE_NUMBER_FLAG_SIGNED
+            setSelectAllOnFocus(true)
+            contentDescription = title
+        }
+        AlertDialog.Builder(context)
+            .setTitle(title)
+            .setMessage(context.getString(R.string.sheet_type_value_range, fmt(min), fmt(max)))
+            .setView(input)
+            .setPositiveButton(R.string.text_done) { _, _ ->
+                input.text.toString().replace(',', '.').toDoubleOrNull()?.takeIf { it.isFinite() }
+                    ?.let { onValue(it.coerceIn(min, max)) }
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+        input.requestFocus()
+    }
+
+    private fun fmt(v: Double) = String.format(Locale.ROOT, "%.2f", v).trimEnd('0').trimEnd('.')
 
     fun checkBox(title: String, checked: Boolean, onChange: (Boolean) -> Unit): CheckBox = CheckBox(context).apply {
         text = title

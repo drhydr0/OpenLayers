@@ -38,15 +38,28 @@ object Arrange {
         val horizontal = direction == Distribution.HORIZONTAL
         fun start(r: Rect) = if (horizontal) r.left else r.top
         fun size(r: Rect) = if (horizontal) r.width else r.height
-        val ordered = boxes.entries.sortedBy { start(it.value) + size(it.value) / 2 }
-        val span = ordered.maxOf { start(it.value) + size(it.value) } - start(ordered.first().value)
-        val gap = (span - ordered.sumOf { size(it.value) }) / (ordered.size - 1)
-        var cursor = start(ordered.first().value)
+        fun center(r: Rect) = start(r) + size(r) / 2
+        // Left to right (or top to bottom) by center, so layers keep their order.
+        val ordered = boxes.entries.sortedBy { center(it.value) }
+        val first = ordered.first().value
+        val last = ordered.last().value
+        val gap = (start(last) + size(last) - start(first) - ordered.sumOf { size(it.value) }) / (ordered.size - 1)
         val result = mutableMapOf<LayerId, Vec2>()
-        for ((id, box) in ordered) {
-            val delta = cursor - start(box)
-            result[id] = if (horizontal) Vec2(delta, 0.0) else Vec2(0.0, delta)
-            cursor += size(box) + gap
+        if (gap >= 0) {
+            // Room for all of them: equal empty space between neighbours, ends fixed.
+            var cursor = start(first)
+            for ((id, box) in ordered) {
+                val delta = cursor - start(box)
+                result[id] = if (horizontal) Vec2(delta, 0.0) else Vec2(0.0, delta)
+                cursor += size(box) + gap
+            }
+        } else {
+            // They overlap too much for equal gaps: space their centers evenly instead.
+            val step = (center(last) - center(first)) / (ordered.size - 1)
+            ordered.forEachIndexed { i, (id, box) ->
+                val delta = center(first) + step * i - center(box)
+                result[id] = if (horizontal) Vec2(delta, 0.0) else Vec2(0.0, delta)
+            }
         }
         return result
     }

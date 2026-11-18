@@ -71,11 +71,14 @@ object Placement {
             height = if (line) strokeWidth * ShapeLayer.ARROW_HEAD_FACTOR else side,
             fill = if (line) Color.TRANSPARENT else DEFAULT_SHAPE_FILL,
             stroke = Color.BLACK,
-            strokeWidth = if (line) strokeWidth else 0.0,
+            // Lines scale their thickness with the view; filled shapes start with a thin outline.
+            strokeWidth = if (line) strokeWidth else DEFAULT_OUTLINE_WIDTH,
             cornerRadius = if (kind == ShapeKind.ROUNDED_RECTANGLE) side / 6 else 0.0,
             transform = Transform(position = frame.center),
         )
     }
+
+    const val DEFAULT_OUTLINE_WIDTH = 4.0
 
     val DEFAULT_SHAPE_FILL = Color(0xFF1E88E5.toInt())
 

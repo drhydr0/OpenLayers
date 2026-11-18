@@ -28,7 +28,10 @@ import io.github.drhydr0.layers.document.TextLayer
 class LayersPanel(
     private val list: RecyclerView,
     private val onSelect: (LayerId) -> Unit,
-    private val onMove: (LayerId, toDocIndex: Int) -> Unit,
+    private val onLongPress: (LayerId) -> Unit,
+    /** Moves a layer to [index] inside [parentId] (null: top level), counted after it leaves. */
+    private val onDrop: (LayerId, parentId: LayerId?, index: Int) -> Unit,
+    private val onRemoveFromGroup: (Layer) -> Unit,
     private val onToggleVisible: (Layer) -> Unit,
     private val onToggleLocked: (Layer) -> Unit,
     private val onRename: (Layer) -> Unit,
@@ -45,14 +48,7 @@ class LayersPanel(
     private val touchHelper = ItemTouchHelper(object : ItemTouchHelper.SimpleCallback(
         ItemTouchHelper.UP or ItemTouchHelper.DOWN, 0,
     ) {
-        // A row can only trade places with its own siblings; group membership changes
-        // through Group and Ungroup.
-        override fun canDropOver(rv: RecyclerView, current: RecyclerView.ViewHolder, target: RecyclerView.ViewHolder): Boolean {
-            val a = rows.getOrNull(current.bindingAdapterPosition) ?: return false
-            val b = rows.getOrNull(target.bindingAdapterPosition) ?: return false
-            val targetOpen = b.layer is GroupLayer && b.layer.id in expanded
-            return a.parentId == b.parentId && a.depth == b.depth && !targetOpen
-        }
+        // Rows can go anywhere: where a row lands decides which group it joins (dropTarget).
 
         override fun onMove(rv: RecyclerView, from: RecyclerView.ViewHolder, to: RecyclerView.ViewHolder): Boolean {
             val a = from.bindingAdapterPosition
@@ -73,7 +69,13 @@ class LayersPanel(
             val to = holder.bindingAdapterPosition
             val moved = dragFrom >= 0 && to >= 0 && to != dragFrom
             dragFrom = -1
-            if (moved) onMove(rows[to].layer.id, LayerRows.documentIndex(rows, to)) else refresh()
+            val doc = document
+            if (moved && doc != null) {
+                val (parent, index) = LayerRows.dropTarget(doc, rows, to)
+                onDrop(rows[to].layer.id, parent, index)
+            } else {
+                refresh()
+            }
         }
     })
 
@@ -153,6 +155,10 @@ class LayersPanel(
             itemView.isActivated = layer.id in selectedIds
             itemView.contentDescription = context.getString(R.string.layers_select_description, layer.name)
             itemView.setOnClickListener { onSelect(layer.id) }
+            itemView.setOnLongClickListener {
+                onLongPress(layer.id)
+                true
+            }
             handle.contentDescription = context.getString(R.string.layers_drag_description, layer.name)
             handle.setOnTouchListener { _, event ->
                 if (event.actionMasked == MotionEvent.ACTION_DOWN) {
@@ -209,11 +215,13 @@ class LayersPanel(
                 if (index < siblingCount - 1) menu.add(0, MENU_UP, 0, R.string.layers_move_up)
                 if (index > 0) menu.add(0, MENU_DOWN, 1, R.string.layers_move_down)
                 menu.add(0, MENU_RENAME, 2, R.string.layers_rename)
+                if (row.parentId != null) menu.add(0, MENU_REMOVE_FROM_GROUP, 3, R.string.layers_remove_from_group)
                 menu.add(0, MENU_DELETE, 3, R.string.layers_delete)
                 setOnMenuItemClickListener {
                     when (it.itemId) {
-                        MENU_UP -> onMove(layer.id, index + 1)
-                        MENU_DOWN -> onMove(layer.id, index - 1)
+                        MENU_UP -> onDrop(layer.id, row.parentId, index + 1)
+                        MENU_DOWN -> onDrop(layer.id, row.parentId, index - 1)
+                        MENU_REMOVE_FROM_GROUP -> onRemoveFromGroup(layer)
                         MENU_RENAME -> onRename(layer)
                         MENU_DELETE -> onDelete(layer)
                     }
@@ -232,5 +240,6 @@ class LayersPanel(
         const val MENU_DOWN = 2
         const val MENU_RENAME = 3
         const val MENU_DELETE = 4
+        const val MENU_REMOVE_FROM_GROUP = 5
     }
 }

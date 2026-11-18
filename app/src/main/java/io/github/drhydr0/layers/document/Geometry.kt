@@ -97,6 +97,25 @@ data class Matrix(
         )
     }
 
+    /**
+     * This matrix as a layer transform: position, scale, rotation, and flip. Exact for
+     * anything a transform can express; a skew (from stretching a group whose children are
+     * rotated) has no transform equivalent and is approximated.
+     */
+    fun toTransform(): Transform {
+        val sx = kotlin.math.hypot(a, b)
+        if (sx < 1e-12) return Transform(position = Vec2(tx, ty))
+        val rotation = Math.toDegrees(kotlin.math.atan2(b, a))
+        val sy = determinant / sx
+        return Transform(
+            position = Vec2(tx, ty),
+            scaleX = sx,
+            scaleY = kotlin.math.abs(sy).coerceAtLeast(1e-9),
+            rotationDegrees = rotation,
+            flipY = sy < 0,
+        )
+    }
+
     companion object {
         val IDENTITY = Matrix()
 
