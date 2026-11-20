@@ -103,6 +103,7 @@ class EditorActivity : Activity() {
     private lateinit var layersPanel: LayersPanel
     private lateinit var layersContainer: View
     private lateinit var layersEmpty: View
+    private var tutorialCard: TutorialCard? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -134,6 +135,7 @@ class EditorActivity : Activity() {
             decodeExecutor = app.decode,
             onLoaded = { if (!isDestroyed) canvasView.invalidate() },
         ).also(canvasView::setImageSource)
+        TutorialProgress(this).takeIf { it.projectId == projectId }?.let { tutorialCard = TutorialCard(this, it) }
         load()
     }
 
@@ -204,7 +206,10 @@ class EditorActivity : Activity() {
             view = canvasView,
             hitTest = hitTest,
             document = { session?.document },
-            commit = { session?.commit(it) },
+            commit = {
+                session?.commit(it)
+                if (it is TransformLayers) tutorialDid(TutorialAction.TRANSFORMED)
+            },
             onSelectionChanged = {
                 refreshLayers()
                 refreshSelectionBar()
@@ -215,6 +220,7 @@ class EditorActivity : Activity() {
                 refreshLayers()
             },
             onMultiSelectChanged = { refreshMultiButton() },
+            onNavigated = { tutorialDid(TutorialAction.NAVIGATED) },
         )
         canvasView.setOnTouchListener(touch)
         // Draws against what's on screen, so handles follow a gesture preview.
@@ -246,6 +252,7 @@ class EditorActivity : Activity() {
                 if (progress.isShowing) progress.dismiss()
                 result.onSuccess { uri ->
                     AppLog.i(TAG, "Export finished")
+                    tutorialDid(TutorialAction.EXPORTED)
                     when (action) {
                         ExportSheet.Action.SAVE -> Toast.makeText(this, R.string.export_saved, Toast.LENGTH_SHORT).show()
                         ExportSheet.Action.SHARE -> shareImage(uri, options.format.mimeType)
@@ -285,8 +292,14 @@ class EditorActivity : Activity() {
             }
             setOnMenuItemClickListener {
                 when (it.itemId) {
-                    MENU_FIT -> canvasView.fitToScreen()
-                    MENU_HISTORY -> session?.history?.let { h -> HistorySheet.show(this@EditorActivity, h, h::goTo) }
+                    MENU_FIT -> {
+                        canvasView.fitToScreen()
+                        tutorialDid(TutorialAction.NAVIGATED)
+                    }
+                    MENU_HISTORY -> session?.history?.let { h ->
+                        HistorySheet.show(this@EditorActivity, h, h::goTo)
+                        tutorialDid(TutorialAction.HISTORY_OPENED)
+                    }
                     MENU_SNAPPING -> touch.snappingEnabled = !touch.snappingEnabled
                     MENU_CHECKPOINT -> askCheckpoint()
                 }
@@ -515,6 +528,7 @@ class EditorActivity : Activity() {
                     touch.enterScope(null)
                     touch.select(layer.id)
                     AppLog.i(TAG, "Created image sticker ${asset.width}x${asset.height}")
+                    tutorialDid(TutorialAction.STICKER_USED)
                 }.onFailure {
                     AppLog.e(TAG, "Storing the capture failed", it)
                     if (!isDestroyed) Toast.makeText(this, R.string.capture_failed, Toast.LENGTH_LONG).show()
@@ -573,6 +587,7 @@ class EditorActivity : Activity() {
                     ACTION_PRECISION -> selected.singleOrNull()?.let { layer ->
                         PrecisionSheet.show(this@EditorActivity, layer.transform) { typed ->
                             session?.let { s -> s.commit(TransformLayers.of(s.document, mapOf(layer.id to typed), "Place")) }
+                            tutorialDid(TutorialAction.PRECISE_MOVE)
                         }
                     }
                     ACTION_MAKE_STICKER -> makeSticker()
@@ -626,6 +641,7 @@ class EditorActivity : Activity() {
             doc, touch.selectedIds, center, Vec2(offset, offset), getString(R.string.default_sticker_name), LayerId::random,
         )
         current.commit(command)
+        tutorialDid(TutorialAction.STICKER_USED)
         touch.setSelection(command.placements.mapTo(LinkedHashSet()) { it.layer.id })
     }
 
@@ -668,7 +684,10 @@ class EditorActivity : Activity() {
             }
             runOnUiThread {
                 if (isDestroyed) return@runOnUiThread
-                result.onSuccess { AppLog.i(TAG, "Saved sticker with ${sticker.assets.size} images") }
+                result.onSuccess {
+                    AppLog.i(TAG, "Saved sticker with ${sticker.assets.size} images")
+                    tutorialDid(TutorialAction.STICKER_USED)
+                }
                     .onFailure { AppLog.e(TAG, "Sticker save failed", it) }
                 Toast.makeText(
                     this, if (result.isSuccess) R.string.sticker_saved else R.string.sticker_save_failed, Toast.LENGTH_SHORT,
@@ -691,6 +710,7 @@ class EditorActivity : Activity() {
                     val doc = current.document
                     val instance = Stickers.instantiate(sticker, placementFrame(doc).center, LayerId::random)
                     current.commit(AddLayers.insertSticker(doc, instance, sticker.assets))
+                    tutorialDid(TutorialAction.STICKER_USED)
                     touch.enterScope(null)
                     touch.select(instance.id)
                 }.onFailure {
@@ -701,12 +721,17 @@ class EditorActivity : Activity() {
         }
     }
 
+    private fun tutorialDid(action: TutorialAction) {
+        tutorialCard?.report(action)
+    }
+
     private fun groupSelection() {
         val current = session ?: return
         val doc = current.document
         val center = touch.selectionCenter(doc) ?: return
         val groupId = LayerId.random()
         current.commit(ReplaceLayers.group(doc, touch.selectedIds, groupId, getString(R.string.default_group_name), center))
+        tutorialDid(TutorialAction.GROUPED)
         touch.select(groupId)
     }
 
@@ -755,7 +780,10 @@ class EditorActivity : Activity() {
         val current = session
         if (commit && current != null && nudgeOffset != Vec2.ZERO) {
             val moved = movedSelection(current.document, nudgeOffset).toMap()
-            if (moved.isNotEmpty()) current.commit(TransformLayers.of(current.document, moved, "Nudge"))
+            if (moved.isNotEmpty()) {
+                current.commit(TransformLayers.of(current.document, moved, "Nudge"))
+                tutorialDid(TutorialAction.PRECISE_MOVE)
+            }
         }
         nudgeOffset = Vec2.ZERO
         endPreview()
@@ -816,14 +844,21 @@ class EditorActivity : Activity() {
                 // Within the same group it's a reorder; across groups the layer changes group.
                 val command = if (doc.parentOf(id) == parentId) MoveLayer.of(doc, id, index)
                 else runCatching { ReplaceLayers.moveTo(doc, id, parentId, index) }.getOrNull()
-                if (command != null) current.commit(command) else refreshLayers()
+                if (command != null) {
+                    current.commit(command)
+                    tutorialDid(TutorialAction.LAYER_ORGANIZED)
+                } else {
+                    refreshLayers()
+                }
             },
             onRemoveFromGroup = { layer -> removeFromGroup(listOf(layer.id)) },
             onToggleVisible = { layer ->
                 session?.let { it.commit(UpdateLayer.setVisible(it.document, layer.id, !layer.visible)) }
+                tutorialDid(TutorialAction.LAYER_ORGANIZED)
             },
             onToggleLocked = { layer ->
                 session?.let { it.commit(UpdateLayer.setLocked(it.document, layer.id, !layer.locked)) }
+                tutorialDid(TutorialAction.LAYER_ORGANIZED)
             },
             onRename = ::askRenameLayer,
             onDelete = { layer ->
@@ -858,6 +893,7 @@ class EditorActivity : Activity() {
                 val doc = session?.document ?: return@setPositiveButton
                 if (name.isNotEmpty() && doc.layer(layer.id) != null) {
                     session?.commit(UpdateLayer.rename(doc, layer.id, name))
+                    tutorialDid(TutorialAction.LAYER_ORGANIZED)
                 }
             }
             .setNegativeButton(android.R.string.cancel, null)
@@ -928,6 +964,7 @@ class EditorActivity : Activity() {
                         },
                     )
                     current.commit(AddLayers.onTop(doc, layer, asset))
+                    tutorialDid(TutorialAction.IMAGE_ADDED)
                     // New content goes on the top level, so step out of any group first.
                     touch.enterScope(null)
                     touch.select(layer.id)
@@ -978,6 +1015,7 @@ class EditorActivity : Activity() {
         val name = getString(shapeNames.first { it.first == kind }.second)
         val layer = Placement.defaultShape(LayerId.random(), name, kind, placementFrame(doc))
         current.commit(AddLayers.onTop(doc, layer))
+        tutorialDid(TutorialAction.SHAPE_ADDED)
         touch.enterScope(null)
         touch.select(layer.id)
         AppLog.i(TAG, "Added shape $kind")
@@ -1001,6 +1039,7 @@ class EditorActivity : Activity() {
             val current = session ?: return@show
             if (current.document.layer(image.id) != null) {
                 current.commit(UpdateLayer.of(current.document, edited, "Adjust image"))
+                tutorialDid(TutorialAction.IMAGE_ADJUSTED)
             }
         }
     }
@@ -1073,6 +1112,7 @@ class EditorActivity : Activity() {
             val layer = layerFor(text, chosen, opacity, LayerId.random())
             textStyleMemory.save(chosen, opacity)
             current.commit(AddLayers.onTop(current.document, layer))
+            tutorialDid(TutorialAction.TEXT_ADDED)
             touch.enterScope(null)
             touch.select(layer.id)
             AppLog.i(TAG, "Added text layer")

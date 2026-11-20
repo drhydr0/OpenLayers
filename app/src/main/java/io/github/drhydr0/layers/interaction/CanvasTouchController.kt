@@ -40,6 +40,7 @@ class CanvasTouchController(
     private val onEditText: (TextLayer) -> Unit,
     private val onScopeChanged: (LayerId?) -> Unit = {},
     private val onMultiSelectChanged: (Boolean) -> Unit = {},
+    private val onNavigated: () -> Unit = {},
 ) : View.OnTouchListener {
 
     private enum class Mode { NONE, MOVE, CORNER, RESIZE, ROTATE, WIDTH }
@@ -193,7 +194,10 @@ class CanvasTouchController(
         val doc = document() ?: return false
         if (navigating) {
             navigation.onTouch(event)
-            if (event.actionMasked == MotionEvent.ACTION_UP || event.actionMasked == MotionEvent.ACTION_CANCEL) navigating = false
+            if (event.actionMasked == MotionEvent.ACTION_UP || event.actionMasked == MotionEvent.ACTION_CANCEL) {
+                navigating = false
+                onNavigated()
+            }
             return true
         }
         // Two fingers move the view unless they began on the selection: then they move it instead.

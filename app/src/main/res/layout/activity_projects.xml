@@ -23,6 +23,16 @@
             android:textSize="32sp" />
 
         <Button
+            android:id="@+id/open_tutorial"
+            style="?android:attr/borderlessButtonStyle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:contentDescription="@string/tutorial_button_description"
+            android:minHeight="48dp"
+            android:minWidth="48dp"
+            android:text="@string/tutorial_button" />
+
+        <Button
             android:id="@+id/open_diagnostics"
             style="?android:attr/borderlessButtonStyle"
             android:layout_width="wrap_content"

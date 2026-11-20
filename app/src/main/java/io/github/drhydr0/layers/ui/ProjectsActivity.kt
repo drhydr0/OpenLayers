@@ -52,6 +52,7 @@ class ProjectsActivity : Activity() {
                 BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE, BuildConfig.COMMIT_HASH,
             )
         }
+        findViewById<Button>(R.id.open_tutorial).setOnClickListener { startTutorial() }
         findViewById<Button>(R.id.open_diagnostics).setOnClickListener {
             startActivity(Intent(this, DiagnosticsActivity::class.java))
         }
@@ -80,6 +81,7 @@ class ProjectsActivity : Activity() {
         // Android relaunches this screen from saved state. The report is deleted once
         // answered, so a rotation re-asks only if the question is still open.
         offerPendingCrashReport()
+        offerTutorialOnce()
     }
 
     override fun onResume() {
@@ -113,6 +115,34 @@ class ProjectsActivity : Activity() {
         if (!file.isFile) return null
         val options = BitmapFactory.Options().apply { inSampleSize = 2 }
         return BitmapFactory.decodeFile(file.path, options)
+    }
+
+    /** Asked once per install; a pending crash report is asked first and the two simply stack. */
+    private fun offerTutorialOnce() {
+        val progress = TutorialProgress(this)
+        if (progress.offered) return
+        progress.offered = true
+        AlertDialog.Builder(this)
+            .setTitle(R.string.tutorial_offer_title)
+            .setMessage(R.string.tutorial_offer_message)
+            .setPositiveButton(R.string.tutorial_offer_start) { _, _ -> startTutorial() }
+            .setNegativeButton(R.string.tutorial_offer_later, null)
+            .show()
+    }
+
+    /** A fresh practice project each time, so the tour never edits the user's own work. */
+    private fun startTutorial() {
+        val name = getString(R.string.tutorial_project_name)
+        app.io.execute {
+            val result = runCatching { app.projects.create(name, TUTORIAL_CANVAS, System.currentTimeMillis()) }
+            runOnUiThread {
+                result.onSuccess {
+                    AppLog.i(TAG, "Tutorial started in ${it.info.id}")
+                    TutorialProgress(this).start(it.info.id)
+                    openProject(it.info)
+                }.onFailure { showError(R.string.projects_create_failed, it) }
+            }
+        }
     }
 
     private fun createProject(name: String, canvas: CanvasSpec) {
@@ -256,5 +286,6 @@ class ProjectsActivity : Activity() {
     private companion object {
         const val TAG = "ProjectsActivity"
         const val REQUEST_OPEN_IMAGE = 1
+        val TUTORIAL_CANVAS = CanvasSpec(1080, 1350)
     }
 }
