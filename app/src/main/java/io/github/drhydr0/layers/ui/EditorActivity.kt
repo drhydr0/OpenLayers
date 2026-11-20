@@ -84,6 +84,7 @@ class EditorActivity : Activity() {
     private lateinit var redoButton: ImageButton
     private lateinit var saveStatus: TextView
     private lateinit var selectionBar: View
+    private val textStyleMemory by lazy { TextStyleMemory(this) }
     private lateinit var multiButton: Button
     private lateinit var nudgeBar: View
     private lateinit var mainBar: View
@@ -270,14 +271,6 @@ class EditorActivity : Activity() {
     }
 
     private fun setUpNavigation() {
-        val toggle = findViewById<ImageButton>(R.id.editor_navigate)
-        toggle.setOnClickListener {
-            touch.navigationMode = !touch.navigationMode
-            toggle.isActivated = touch.navigationMode
-            toggle.contentDescription = getString(
-                if (touch.navigationMode) R.string.editor_navigate_on else R.string.editor_navigate_off,
-            )
-        }
         findViewById<ImageButton>(R.id.editor_more).setOnClickListener(::showMoreMenu)
     }
 
@@ -293,7 +286,7 @@ class EditorActivity : Activity() {
             setOnMenuItemClickListener {
                 when (it.itemId) {
                     MENU_FIT -> canvasView.fitToScreen()
-                    MENU_HISTORY -> session?.history?.let { h -> HistorySheet.show(this@EditorActivity, h, h::jumpTo) }
+                    MENU_HISTORY -> session?.history?.let { h -> HistorySheet.show(this@EditorActivity, h, h::goTo) }
                     MENU_SNAPPING -> touch.snappingEnabled = !touch.snappingEnabled
                     MENU_CHECKPOINT -> askCheckpoint()
                 }
@@ -1053,7 +1046,9 @@ class EditorActivity : Activity() {
         val doc = session?.document ?: return
         // Sized and placed for the view as it is when Text is tapped.
         val frame = placementFrame(doc)
-        val style = TextStyle(fontSize = Placement.defaultFontSize(frame.sizing))
+        // Start from the last text's style, so a look set up once carries on to new text.
+        val remembered = textStyleMemory.load()
+        val style = remembered?.first ?: TextStyle(fontSize = Placement.defaultFontSize(frame.sizing))
         fun layerFor(text: String, chosen: TextStyle, opacity: Double, id: LayerId) = TextLayer(
             id = id,
             name = getString(R.string.editor_default_text_name),
@@ -1065,7 +1060,7 @@ class EditorActivity : Activity() {
         )
         val previewId = LayerId.random()
         TextSheet.show(
-            this, R.string.text_add_title, "", style, 1.0, Placement.maxFontSize(doc.canvas),
+            this, R.string.text_add_title, "", style, remembered?.second ?: 1.0, Placement.maxFontSize(doc.canvas),
             onPreview = { text, chosen, opacity ->
                 // The new text shows on top while it is being typed; it is added on Done.
                 session?.document?.let {
@@ -1076,6 +1071,7 @@ class EditorActivity : Activity() {
         ) { text, chosen, opacity ->
             val current = session ?: return@show
             val layer = layerFor(text, chosen, opacity, LayerId.random())
+            textStyleMemory.save(chosen, opacity)
             current.commit(AddLayers.onTop(current.document, layer))
             touch.enterScope(null)
             touch.select(layer.id)
@@ -1094,6 +1090,7 @@ class EditorActivity : Activity() {
             val current = session ?: return@show
             // The layer may have moved or been edited meanwhile: start from its current state.
             val latest = current.document.layer(layer.id) as? TextLayer ?: return@show
+            textStyleMemory.save(style, opacity)
             current.commit(UpdateLayer.editText(current.document, latest.copy(text = text, style = style, opacity = opacity)))
         }
     }

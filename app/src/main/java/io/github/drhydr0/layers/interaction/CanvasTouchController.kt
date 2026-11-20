@@ -90,14 +90,6 @@ class CanvasTouchController(
         longPress(id)
     }
 
-    /** While on, every touch moves the view instead of editing (canvas navigation mode). */
-    var navigationMode = false
-        set(value) {
-            // Entering navigation drops any half-finished edit gesture.
-            if (value && !field) cancel()
-            field = value
-        }
-
     /** While set, touches draw and adjust an area selection instead of editing layers. */
     var areaTool: AreaSelectionTool? = null
         set(value) {
@@ -129,6 +121,8 @@ class CanvasTouchController(
     private var resizeX = 0
     private var resizeY = 0
     private var longPressed = false
+    private var navigating = false
+    private var startedOnSelection = false
     private val longPressRunnable = Runnable {
         val id = tappedId
         if (!moved && id != null && startDoc != null) {
@@ -197,8 +191,14 @@ class CanvasTouchController(
     @SuppressLint("ClickableViewAccessibility") // The layers panel offers the accessible route.
     override fun onTouch(v: View, event: MotionEvent): Boolean {
         val doc = document() ?: return false
-        if (navigationMode) {
+        if (navigating) {
             navigation.onTouch(event)
+            if (event.actionMasked == MotionEvent.ACTION_UP || event.actionMasked == MotionEvent.ACTION_CANCEL) navigating = false
+            return true
+        }
+        // Two fingers move the view unless they began on the selection: then they move it instead.
+        if (event.actionMasked == MotionEvent.ACTION_POINTER_DOWN && (areaTool != null || !startedOnSelection && !moved)) {
+            startNavigating(event)
             return true
         }
         areaTool?.let {
@@ -213,6 +213,15 @@ class CanvasTouchController(
             MotionEvent.ACTION_CANCEL -> cancel()
         }
         return true
+    }
+
+    /** Hands the rest of this touch to pan and zoom, dropping any half-started edit. */
+    private fun startNavigating(event: MotionEvent) {
+        view.removeCallbacks(longPressRunnable)
+        startDoc?.let { view.document = it }
+        reset()
+        navigating = true
+        navigation.onTouch(event)
     }
 
     private fun begin(doc: Document, event: MotionEvent) {
@@ -241,6 +250,7 @@ class CanvasTouchController(
             multiSelectMode -> emptyList()
             else -> listOfNotNull(hit)
         }
+        startedOnSelection = onSelection
         targetIds = targets.map { it.id }
         mode = when {
             targets.isEmpty() -> Mode.NONE

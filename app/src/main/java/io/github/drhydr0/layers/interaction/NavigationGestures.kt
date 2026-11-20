@@ -6,7 +6,7 @@ import io.github.drhydr0.layers.render.DocumentView
 import io.github.drhydr0.layers.render.Viewport
 import kotlin.math.hypot
 
-/** Canvas navigation mode: one finger pans, two fingers pan and zoom. Never edits the document. */
+/** Two-finger pan and zoom of the view. Never edits the document. */
 class NavigationGestures(private val view: DocumentView) {
 
     private var lastFocus: Vec2? = null

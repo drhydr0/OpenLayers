@@ -69,7 +69,7 @@ class ManifestCodecTest {
 
     @Test
     fun encodedFileIsVersioned() {
-        assertTrue(ManifestCodec.encode(manifest).contains("\"formatVersion\": 5"))
+        assertTrue(ManifestCodec.encode(manifest).contains("\"formatVersion\": 6"))
     }
 
     @Test
@@ -236,6 +236,25 @@ class ManifestCodecTest {
     }
 
     @Test
+    fun journalWithUndosAndJumpsRoundTrips() {
+        val start = manifest.document
+        val history = History(start)
+        history.execute(UpdateLayer.rename(start, LayerId("img-1"), "One"))
+        history.execute(TransformLayers.of(history.document, mapOf(LayerId("img-2") to Transform(Vec2(9.0, 9.0))), "Move"))
+        history.undo()
+        history.redo()
+        history.goTo(1)
+        val saved = manifest.copy(document = history.document, history = history.snapshot())
+        val read = ManifestCodec.decode(ManifestCodec.encode(saved))
+        assertEquals(saved, read)
+        assertEquals("Go back to: Rename layer", read.history.journal.last().label)
+        // The reloaded journal still reaches the very start.
+        val reopened = History(read.document, read.history)
+        reopened.goTo(0)
+        assertEquals(start, reopened.document)
+    }
+
+    @Test
     fun damagedHistoryFailsClearly() {
         val encoded = ManifestCodec.encode(manifest)
         val broken = encoded.replace("\"undo\": []", "\"undo\": [ { \"type\": \"teleport\" } ]")
@@ -251,7 +270,7 @@ class ManifestCodecTest {
 
     @Test
     fun rejectsNewerFormat() {
-        val newer = ManifestCodec.encode(manifest).replace("\"formatVersion\": 5", "\"formatVersion\": 6")
+        val newer = ManifestCodec.encode(manifest).replace("\"formatVersion\": 6", "\"formatVersion\": 7")
         assertFails("newer version", newer)
     }
 
@@ -259,7 +278,7 @@ class ManifestCodecTest {
     fun rejectsBrokenFiles() {
         assertFails("not valid JSON", "{ truncated")
         assertFails("no format version", "{}")
-        assertFails("damaged", """{ "formatVersion": 5 }""")
+        assertFails("damaged", """{ "formatVersion": 6 }""")
         // A layer pointing at an asset that isn't listed.
         val missingAsset = ManifestCodec.encode(manifest).replace("\"assetId\": \"${"b".repeat(64)}\"", "\"assetId\": \"${"d".repeat(64)}\"")
         assertFails("inconsistent", missingAsset)

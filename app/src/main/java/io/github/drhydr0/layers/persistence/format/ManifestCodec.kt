@@ -21,6 +21,9 @@ import io.github.drhydr0.layers.document.Transform
 import io.github.drhydr0.layers.document.Vec2
 import io.github.drhydr0.layers.history.AddLayers
 import io.github.drhydr0.layers.history.Command
+import io.github.drhydr0.layers.history.CommandSequence
+import io.github.drhydr0.layers.history.InverseCommand
+import io.github.drhydr0.layers.history.JournalEntry
 import io.github.drhydr0.layers.history.MoveLayer
 import io.github.drhydr0.layers.history.PlacedLayer
 import io.github.drhydr0.layers.history.RemoveLayers
@@ -56,7 +59,7 @@ class ManifestException(message: String, cause: Throwable? = null) : Exception(m
 /** Converts [ProjectManifest] to and from the versioned JSON file format. */
 object ManifestCodec {
 
-    const val CURRENT_VERSION = 5
+    const val CURRENT_VERSION = 6
 
     /**
      * Upgrades from version N to N+1, keyed by N. A format change bumps [CURRENT_VERSION]
@@ -71,6 +74,8 @@ object ManifestCodec {
         3 to { obj -> JsonObject(obj + ("formatVersion" to JsonPrimitive(4))) },
         // 4 -> 5 added text styling and image adjustments and crop; older layers use the defaults.
         4 to { obj -> JsonObject(obj + ("formatVersion" to JsonPrimitive(5))) },
+        // 5 -> 6 added the history journal; older projects start with an empty one.
+        5 to { obj -> JsonObject(obj + ("formatVersion" to JsonPrimitive(6))) },
     )
 
     internal val json = Json {
@@ -128,6 +133,7 @@ object ManifestCodec {
             history = HistoryDto(
                 undo = manifest.history.undo.map(::commandToDto),
                 redo = manifest.history.redo.map(::commandToDto),
+                journal = manifest.history.journal.map { JournalEntryDto(it.label, commandToDto(it.command)) },
             ),
         )
     }
@@ -141,7 +147,11 @@ object ManifestCodec {
                 AssetId(a.id).let { it to ImageAsset(it, a.mimeType, a.width, a.height) }
             },
         )
-        val history = SavedHistory(dto.history.undo.map(::commandFromDto), dto.history.redo.map(::commandFromDto))
+        val history = SavedHistory(
+            dto.history.undo.map(::commandFromDto),
+            dto.history.redo.map(::commandFromDto),
+            dto.history.journal.map { JournalEntry(it.label, commandFromDto(it.command)) },
+        )
         return ProjectManifest(ProjectInfo(p.id, p.name, p.createdAtMillis, p.modifiedAtMillis), document, history)
     }
 
@@ -157,6 +167,8 @@ object ManifestCodec {
             },
         )
         is UpdateLayer -> UpdateLayerDto(command.label, layerToDto(command.before), layerToDto(command.after))
+        is InverseCommand -> InverseCommandDto(commandToDto(command.of))
+        is CommandSequence -> CommandSequenceDto(command.label, command.commands.map(::commandToDto))
         else -> throw IllegalArgumentException("Command ${command::class.simpleName} has no saved form")
     }
 
@@ -171,6 +183,8 @@ object ManifestCodec {
             label = dto.label,
         )
         is UpdateLayerDto -> UpdateLayer(layerFromDto(dto.before), layerFromDto(dto.after), dto.label)
+        is InverseCommandDto -> InverseCommand(commandFromDto(dto.of))
+        is CommandSequenceDto -> CommandSequence(dto.commands.map(::commandFromDto), dto.label)
     }
 
     private fun placedToDto(p: PlacedLayer) = PlacedLayerDto(p.index, layerToDto(p.layer), p.parentId?.value)

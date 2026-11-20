@@ -108,8 +108,6 @@
     <string name="layers_rename">Rename</string>
     <string name="layers_rename_title">Rename layer</string>
     <string name="layers_delete">Delete</string>
-    <string name="editor_navigate_off">Pan and zoom mode: off. Tap to move the view instead of layers.</string>
-    <string name="editor_navigate_on">Pan and zoom mode: on. Tap to edit layers again.</string>
     <string name="editor_export">Export</string>
     <string name="export_title">Export image</string>
     <string name="export_format_label">Format</string>

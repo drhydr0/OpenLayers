@@ -5,12 +5,17 @@ import android.app.AlertDialog
 import io.github.drhydr0.layers.R
 import io.github.drhydr0.layers.history.History
 
-/** Lists retained actions, newest first, and jumps to the state after any of them. */
+/**
+ * Lists every change newest first, including undos, redos, and earlier jumps, and goes
+ * back to the state after any of them. Going back is recorded too, so nothing is lost.
+ */
 object HistorySheet {
 
     fun show(activity: Activity, history: History, onJump: (position: Int) -> Unit) {
-        val rows = rows(history.labels(), activity.getString(R.string.history_oldest))
-        val current = rowFor(history.position, rows.size)
+        val labels = history.journalLabels()
+        val rows = rows(labels, activity.getString(R.string.history_oldest))
+        // The newest entry is always the current state.
+        val current = rowFor(labels.size, rows.size)
         AlertDialog.Builder(activity)
             .setTitle(R.string.history_title)
             .setSingleChoiceItems(rows.toTypedArray(), current) { dialog, row ->

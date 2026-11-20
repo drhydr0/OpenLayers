@@ -45,14 +45,6 @@
         </LinearLayout>
 
         <ImageButton
-            android:id="@+id/editor_navigate"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:background="@drawable/toggle_background"
-            android:contentDescription="@string/editor_navigate_off"
-            android:src="@drawable/ic_pan" />
-
-        <ImageButton
             android:id="@+id/editor_undo"
             android:layout_width="48dp"
             android:layout_height="48dp"
@@ -175,29 +167,29 @@
         android:background="?android:attr/colorBackground"
         android:visibility="gone">
 
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/editor_layers_list"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:paddingTop="56dp"
-            android:clipToPadding="false" />
-
-        <!-- Multiselect lives with the list; long-pressing a layer turns it on or off too. -->
+        <!-- Its own strip above the list (the list starts below it), so it never covers a layer. -->
         <Button
             android:id="@+id/editor_multiselect"
             style="?android:attr/borderlessButtonStyle"
             android:layout_width="wrap_content"
-            android:layout_height="56dp"
+            android:layout_height="48dp"
             android:layout_gravity="top|end"
             android:background="@drawable/layer_row_background"
             android:contentDescription="@string/editor_multiselect_off"
             android:paddingHorizontal="16dp"
             android:text="@string/editor_multiselect" />
 
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/editor_layers_list"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_marginTop="48dp" />
+
         <TextView
             android:id="@+id/editor_layers_empty"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
+            android:layout_marginTop="48dp"
             android:gravity="center"
             android:padding="16dp"
             android:text="@string/layers_empty" />
