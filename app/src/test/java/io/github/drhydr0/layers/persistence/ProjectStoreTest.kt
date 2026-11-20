@@ -105,6 +105,7 @@ class ProjectStoreTest {
         val redoOnly = import("undone add, redo can bring it back")
         val orphan = import("added, undone, then a new edit cleared redo")
 
+
         val history = History(p.document)
         history.execute(AddLayers.onTop(history.document, ImageLayer(LayerId("a"), "A", inDoc.id), inDoc))
         history.execute(AddLayers.onTop(history.document, ImageLayer(LayerId("b"), "B", deleted.id), deleted))
@@ -114,7 +115,14 @@ class ProjectStoreTest {
         history.execute(RemoveLayers.of(history.document, listOf(LayerId("b"))))
         history.execute(AddLayers.onTop(history.document, ImageLayer(LayerId("c"), "C", redoOnly.id), redoOnly))
         history.undo()
-        val saved = p.copy(document = history.document, history = history.snapshot())
+        // The history list can still go back to the orphan's state, so it must stay.
+        val withJournal = p.copy(document = history.document, history = history.snapshot())
+        store.save(withJournal)
+        assertTrue(orphan.id in ProjectStore(temp.root).pruneAssets(store.load(p.info.id)).document.assets)
+        assertTrue(assets.contains(orphan.id))
+
+        // Once the journal no longer reaches it (here: no journal), nothing can bring it back.
+        val saved = p.copy(document = history.document, history = history.snapshot().copy(journal = emptyList()))
         store.save(saved)
 
         val pruned = ProjectStore(temp.root).pruneAssets(store.load(p.info.id))

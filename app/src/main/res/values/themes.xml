@@ -1,3 +1,7 @@
 <resources>
-    <style name="Theme.Layers" parent="android:Theme.DeviceDefault.DayNight" />
+    <!-- No title bar: each screen shows its own heading, which leaves more room for the canvas. -->
+    <style name="Theme.Layers" parent="android:Theme.DeviceDefault.DayNight">
+        <item name="android:windowActionBar">false</item>
+        <item name="android:windowNoTitle">true</item>
+    </style>
 </resources>

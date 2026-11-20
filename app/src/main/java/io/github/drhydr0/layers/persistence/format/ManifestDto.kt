@@ -28,7 +28,22 @@ internal data class HistoryDto(
     val undo: List<CommandDto> = emptyList(),
     /** Stack order: the last entry is redone next. */
     val redo: List<CommandDto> = emptyList(),
+    /** Since format 6: every change in order, oldest first, including undos and redos. */
+    val journal: List<JournalEntryDto> = emptyList(),
 )
+
+@Serializable
+internal data class JournalEntryDto(val label: String, val command: CommandDto)
+
+/** Since format 6. */
+@Serializable
+@SerialName("inverse")
+internal data class InverseCommandDto(val of: CommandDto) : CommandDto
+
+/** Since format 6. */
+@Serializable
+@SerialName("sequence")
+internal data class CommandSequenceDto(val label: String, val commands: List<CommandDto>) : CommandDto
 
 @Serializable
 internal data class PlacedLayerDto(

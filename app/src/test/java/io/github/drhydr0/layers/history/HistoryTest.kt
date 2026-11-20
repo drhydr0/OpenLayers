@@ -88,8 +88,7 @@ class HistoryTest {
         val reopened = History(first.document, first.snapshot())
         assertEquals("Add layer", reopened.undoLabel)
         assertEquals("Rename layer", reopened.redoLabel)
-        assertEquals(listOf("Add layer", "Add layer", "Rename layer"), reopened.labels())
-        assertEquals(2, reopened.position)
+        assertEquals(listOf("Add layer", "Add layer", "Rename layer", "Undo Rename layer"), reopened.journalLabels())
         assertTrue(reopened.redo())
         assertEquals("Title", reopened.document.requireLayer(LayerId("a")).name)
         reopened.undo()
@@ -100,27 +99,68 @@ class HistoryTest {
     }
 
     @Test
-    fun jumpToMovesBackAndForwardInOneChange() {
+    fun journalRecordsEveryUndoAndRedo() {
         val history = History(empty)
-        val states = mutableListOf(history.document)
-        repeat(4) {
-            history.execute(AddLayers.onTop(history.document, textLayer("L$it")))
-            states += history.document
-        }
+        history.execute(AddLayers.onTop(history.document, textLayer("a")))
+        history.execute(UpdateLayer.rename(history.document, LayerId("a"), "Title"))
+        history.undo()
+        history.redo()
+        history.undo()
+        assertEquals(
+            listOf("Add layer", "Rename layer", "Undo Rename layer", "Redo Rename layer", "Undo Rename layer"),
+            history.journalLabels(),
+        )
+    }
+
+    @Test
+    fun goingBackReachesStatesOnABranchALaterEditReplaced() {
+        val history = History(empty)
+        history.execute(AddLayers.onTop(history.document, textLayer("a")))
+        history.execute(AddLayers.onTop(history.document, textLayer("b")))
+        val withB = history.document
+        history.undo()
+        // A new edit after undo: ordinary redo of "b" is gone...
+        history.execute(AddLayers.onTop(history.document, textLayer("c")))
+        assertFalse(history.canRedo)
+        // ...but the journal still holds the state with "b" (after entry 2), so it can come back.
         var calls = 0
         history.addListener { calls++ }
-        assertTrue(history.jumpTo(1))
-        assertEquals(states[1], history.document)
-        assertEquals(1, history.position)
+        assertTrue(history.goTo(2))
+        assertEquals(withB, history.document)
         assertEquals(1, calls)
-        assertTrue(history.jumpTo(4))
-        assertEquals(states[4], history.document)
-        assertTrue(history.jumpTo(0))
+        assertEquals("Go back to: Add layer", history.journalLabels().last())
+        // Going back is itself undoable, returning to the state with "c".
+        assertTrue(history.undo())
+        assertEquals(listOf("a", "c"), history.document.layers.map { it.id.value })
+        // And the oldest state is reachable too.
+        assertTrue(history.goTo(0))
         assertEquals(empty, history.document)
-        assertFalse(history.jumpTo(0))
-        assertEquals(3, calls)
-        // Labels stay in order whatever the position.
-        assertEquals(List(4) { "Add layer" }, history.labels())
+        assertFalse(history.goTo(history.journalLabels().size))
+    }
+
+    @Test
+    fun everyJournalStateIsReachableAfterRandomSessions() {
+        repeat(10) { seed ->
+            val random = Random(seed)
+            val history = History(empty)
+            val states = mutableListOf(history.document)
+            var next = 0
+            repeat(80) {
+                when (random.nextInt(4)) {
+                    0 -> history.undo()
+                    1 -> history.redo()
+                    else -> history.execute(randomCommand(random, history.document) { "L${next++}" })
+                }
+                // Track the state after each journal entry.
+                while (states.size < history.journalLabels().size + 1) states += history.document
+            }
+            val count = history.journalLabels().size
+            for (k in listOf(0, count / 3, count / 2, count - 1)) {
+                val reopened = History(history.document, history.snapshot())
+                reopened.goTo(k)
+                assertEquals("seed $seed entry $k", states[k], reopened.document)
+            }
+        }
     }
 
     @Test
