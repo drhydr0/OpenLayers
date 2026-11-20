@@ -362,4 +362,33 @@
     <string name="nudge_done">Done</string>
     <string name="nudge_cancel">Cancel</string>
     <string name="editor_open_failed">Could not open the project.</string>
+    <!-- Guided tour. Each step is one or two short sentences. -->
+    <string name="tutorial_button">Tutorial</string>
+    <string name="tutorial_button_description">Start the guided tour of the app\'s features</string>
+    <string name="tutorial_project_name">Tutorial</string>
+    <string name="tutorial_offer_title">Take the tour?</string>
+    <string name="tutorial_offer_message">13 short steps show every main feature in a practice project. About 5 minutes. You can start it later from Tutorial.</string>
+    <string name="tutorial_offer_start">Start tour</string>
+    <string name="tutorial_offer_later">Not now</string>
+    <string name="tutorial_step_count">Step %1$d of %2$d</string>
+    <string name="tutorial_back">Back</string>
+    <string name="tutorial_next">Next</string>
+    <string name="tutorial_skip">Skip</string>
+    <string name="tutorial_finish">Finish</string>
+    <string name="tutorial_close">End tour</string>
+    <string name="tutorial_step_done">Done! Moving on…</string>
+    <string name="tutorial_finished">Tour finished. Start it again any time from Tutorial.</string>
+    <string name="tutorial_step_1">This is a practice project. Top: undo, redo, export and More. Bottom: Add, Select and Layers. Every change saves itself.</string>
+    <string name="tutorial_step_2">Tap Add › Image and pick a photo.</string>
+    <string name="tutorial_step_3">Tap the photo to select it. Drag to move, pinch to resize, twist to rotate, or drag a handle to stretch.</string>
+    <string name="tutorial_step_4">Put two fingers on empty canvas: drag to pan, pinch to zoom. More › Fit canvas to screen resets the view.</string>
+    <string name="tutorial_step_5">Tap Add › Text, type something, pick a font and color, then Done. Double-tap text to edit it later.</string>
+    <string name="tutorial_step_6">Tap Add › Shape and choose one. Select it and tap Edit to change its fill and outline.</string>
+    <string name="tutorial_step_7">Tap Layers. Drag ☰ to reorder, use the eye to hide and the lock to protect, or ⋮ to rename.</string>
+    <string name="tutorial_step_8">Tap Select several, then tap two layers. Tap Actions › Group. Align and Space evenly are in the same menu.</string>
+    <string name="tutorial_step_9">Select one layer and tap Actions › Position and size to type exact values, or Nudge to move pixel by pixel.</string>
+    <string name="tutorial_step_10">Select the photo and tap Edit to change brightness, contrast and saturation, flip, or crop.</string>
+    <string name="tutorial_step_11">Select a layer and tap Actions › Save to sticker collection. Add › Sticker reuses it in any project. Select copies an area as a sticker.</string>
+    <string name="tutorial_step_12">Undo and redo are at the top. Open More › History: every change is listed, even undos. Tap a row to go back to it.</string>
+    <string name="tutorial_step_13">Tap Export, choose PNG or JPEG and the size, then save to the gallery or share.</string>
 </resources>
